@@ -1,0 +1,8 @@
+**/node_modules
+**/npm-debug.log
+**/dist
+**/.DS_Store
+**/.env
+**/.git
+frontend/legacy-frontend-pacient/node_modules
+frontend/legacy-frontend-pacient/build

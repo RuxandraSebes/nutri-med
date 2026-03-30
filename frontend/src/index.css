@@ -1,0 +1,353 @@
+/* Modern app baseline (no Tailwind) */
+:root {
+  --bg: #0b1220;
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-2: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.12);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.68);
+  --muted-2: rgba(255, 255, 255, 0.48);
+  --shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
+  --radius: 16px;
+  --radius-sm: 12px;
+  --primary: #7c3aed;
+  --primary-2: #a78bfa;
+  --good: #22c55e;
+  --danger: #fb7185;
+  --ring: rgba(124, 58, 237, 0.35);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
+    Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--text);
+  background:
+    radial-gradient(900px 500px at 15% 10%, rgba(124, 58, 237, 0.28), transparent 60%),
+    radial-gradient(900px 500px at 85% 15%, rgba(34, 197, 94, 0.12), transparent 55%),
+    radial-gradient(1200px 700px at 50% 100%, rgba(59, 130, 246, 0.12), transparent 55%),
+    var(--bg);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.appShell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--border);
+  background: rgba(10, 16, 28, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.topbarInner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.brandMark {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary), #3b82f6);
+  box-shadow: 0 10px 25px rgba(124, 58, 237, 0.25);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav a {
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: var(--muted);
+}
+
+.nav a:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.nav a[data-active="true"] {
+  color: var(--text);
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid rgba(124, 58, 237, 0.22);
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 18px;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+.grid.two {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 920px) {
+  .grid.two {
+    grid-template-columns: 1.1fr 0.9fr;
+    align-items: start;
+  }
+}
+
+.card {
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface), rgba(255, 255, 255, 0.03));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.cardHeader {
+  padding: 18px 18px 0 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.cardBody {
+  padding: 18px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.badge {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.stepper {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.stepDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.stepDot.active {
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  border-color: rgba(167, 139, 250, 0.5);
+  box-shadow: 0 0 0 6px rgba(124, 58, 237, 0.12);
+}
+
+.formGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 720px) {
+  .formGrid.two {
+    grid-template-columns: 1fr 1fr;
+  }
+  .formGrid.three {
+    grid-template-columns: 180px 1fr 160px;
+  }
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--muted-2);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: rgba(7, 10, 18, 0.55);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 12px;
+  outline: none;
+}
+
+.textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: rgba(167, 139, 250, 0.55);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 10px;
+}
+
+.btn {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-weight: 650;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  border-color: rgba(124, 58, 237, 0.35);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.9), rgba(59, 130, 246, 0.75));
+}
+
+.btnPrimary:hover {
+  filter: brightness(1.05);
+}
+
+.btnSuccess {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.88), rgba(16, 185, 129, 0.75));
+}
+
+.pillList {
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.pillItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  margin-top: 10px;
+}
+
+.pillItem:first-child {
+  margin-top: 0;
+}
+
+.danger {
+  color: var(--danger);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.pre {
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.sectionTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.84);
+  letter-spacing: 0.01em;
+}
+

@@ -1,0 +1,114 @@
+services:
+  mysql:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DB:-nutrimed}
+      MYSQL_USER: ${MYSQL_USER:-nutrimed}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nutrimed_pw}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_pw}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "127.0.0.1",
+          "-uroot",
+          "-p${MYSQL_ROOT_PASSWORD:-root_pw}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  patient-service:
+    build:
+      context: ./backend/patient-service
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: ${MYSQL_DB:-nutrimed}
+      MYSQL_USER: ${MYSQL_USER:-nutrimed}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nutrimed_pw}
+      PATIENT_SERVICE_PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  medical-service:
+    build:
+      context: ./backend/medical-service
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: ${MYSQL_DB:-nutrimed}
+      MYSQL_USER: ${MYSQL_USER:-nutrimed}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nutrimed_pw}
+      MEDICAL_SERVICE_PORT: 3002
+    ports:
+      - "3002:3002"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  recommendation-service:
+    build:
+      context: ./backend/recommendation-service
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: ${MYSQL_DB:-nutrimed}
+      MYSQL_USER: ${MYSQL_USER:-nutrimed}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nutrimed_pw}
+      RECOMMENDATION_SERVICE_PORT: 3003
+      PATIENT_SERVICE_URL: http://patient-service:3001
+      MEDICAL_SERVICE_URL: http://medical-service:3002
+    ports:
+      - "3003:3003"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      patient-service:
+        condition: service_started
+      medical-service:
+        condition: service_started
+
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+    environment:
+      PORT: 3000
+      PATIENT_SERVICE_URL: http://patient-service:3001
+      MEDICAL_SERVICE_URL: http://medical-service:3002
+      RECOMMENDATION_SERVICE_URL: http://recommendation-service:3003
+    ports:
+      - "3000:3000"
+    depends_on:
+      patient-service:
+        condition: service_started
+      medical-service:
+        condition: service_started
+      recommendation-service:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      VITE_API_BASE: http://localhost:3000
+    ports:
+      - "5173:5173"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+volumes:
+  mysql_data:
