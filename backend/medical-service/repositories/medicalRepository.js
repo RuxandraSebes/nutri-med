@@ -33,9 +33,6 @@ function normalizeClinicalPayload(payload) {
     }
     if (bm.glucose_mg_dl != null) out.glucose = bm.glucose_mg_dl;
     if (bm.cholesterol_mg_dl != null) out.cholesterol = bm.cholesterol_mg_dl;
-    if (bm.nutrient_imbalance_score != null) {
-      out.nutrient_imbalance_score = bm.nutrient_imbalance_score;
-    }
   }
 
   if (raw.body_composition) {
@@ -94,7 +91,6 @@ async function createClinicalBundle(patientId, payload) {
     diastolic_bp: p.diastolic_bp ?? null,
     glucose: p.glucose ?? null,
     cholesterol: p.cholesterol ?? null,
-    nutrient_imbalance_score: p.nutrient_imbalance_score ?? null,
     specialist_form_json: p.specialist_form_json ?? null,
   });
 

@@ -12,7 +12,6 @@ module.exports = (sequelize) =>
       diastolic_bp: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
       glucose: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
       cholesterol: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
-      nutrient_imbalance_score: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
       specialist_form_json: { type: DataTypes.JSON, allowNull: true },
       recorded_at: {
         type: DataTypes.DATE,

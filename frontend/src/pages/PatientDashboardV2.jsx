@@ -16,6 +16,9 @@ export default function PatientDashboardV2() {
   const [plan, setPlan] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [diaryDraft, setDiaryDraft] = useState("");
+  const [diarySaving, setDiarySaving] = useState(false);
+  const [diaryMsg, setDiaryMsg] = useState("");
 
   const recordId = profile?.record_id;
   const canLoad = !!recordId;
@@ -49,6 +52,7 @@ export default function PatientDashboardV2() {
         const me = await patientApi.getMe();
         if (cancelled) return;
         setProfile(me);
+        setDiaryDraft(me?.daily_log?.["24h_food_diary_text"] || "");
         if (me?.record_id) {
           const p = await recommendationApi.getLatestPlan(me.record_id);
           if (!cancelled) setPlan(p);
@@ -61,6 +65,23 @@ export default function PatientDashboardV2() {
       cancelled = true;
     };
   }, []);
+
+  async function saveDiary() {
+    setDiarySaving(true);
+    setDiaryMsg("");
+    setError("");
+    try {
+      const updated = await patientApi.putMe({
+        daily_log: { "24h_food_diary_text": diaryDraft.trim() || null },
+      });
+      setProfile(updated);
+      setDiaryMsg("Saved.");
+    } catch (e) {
+      setError(e.message || "Could not save diary");
+    } finally {
+      setDiarySaving(false);
+    }
+  }
 
   return (
     <div style={{ maxWidth: 980, margin: "0 auto" }}>
@@ -136,29 +157,29 @@ export default function PatientDashboardV2() {
               ) : null}
             </div>
 
-            {profile.daily_log?.["24h_food_diary_text"] ? (
-              <div>
-                <div className="label-sm" style={{ marginBottom: 4 }}>
-                  24h food diary (read-only)
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    padding: 12,
-                    background: "var(--gray-50)",
-                    borderRadius: "var(--radius-md)",
-                    border: "1px solid var(--border)",
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {profile.daily_log["24h_food_diary_text"]}
-                </div>
+            <div>
+              <div className="label-sm" style={{ marginBottom: 6 }}>
+                24h food diary
               </div>
-            ) : (
-              <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-                Add your 24h diary in “My profile”.
+              <textarea
+                className="textarea"
+                rows={5}
+                value={diaryDraft}
+                onChange={(e) => setDiaryDraft(e.target.value)}
+                placeholder="Breakfast: … Lunch: … Dinner: …"
+              />
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                <Button variant="primary" size="sm" loading={diarySaving} onClick={saveDiary}>
+                  Save diary
+                </Button>
+                {diaryMsg ? (
+                  <span style={{ fontSize: 13, color: "var(--green-700)", fontWeight: 600 }}>{diaryMsg}</span>
+                ) : null}
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  The specialist will review this entry.
+                </span>
               </div>
-            )}
+            </div>
 
             {plan?.status === "pending" ? (
               <div style={{ fontSize: 13, color: "var(--amber-600)", fontWeight: 600 }}>

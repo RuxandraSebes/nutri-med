@@ -22,7 +22,6 @@ function toSpecialistObject(record) {
           : null,
       cholesterol_mg_dl: record.cholesterol,
       glucose_mg_dl: record.glucose,
-      nutrient_imbalance_score: record.nutrient_imbalance_score,
     },
     biomarkers: {
       systolic_bp: record.systolic_bp,

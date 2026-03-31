@@ -194,7 +194,6 @@ export default function SpecialistDashboard() {
   const [diastolic, setDiastolic] = useState("");
   const [glucose, setGlucose] = useState("");
   const [cholesterol, setCholesterol] = useState("");
-  const [nutrientScore, setNutrientScore] = useState("");
 
   const [fatPct, setFatPct] = useState("");
   const [waterPct, setWaterPct] = useState("");
@@ -297,8 +296,6 @@ export default function SpecialistDashboard() {
         blood_pressure_mmhg: bp,
         glucose_mg_dl: glucose === "" ? null : Number(glucose),
         cholesterol_mg_dl: cholesterol === "" ? null : Number(cholesterol),
-        nutrient_imbalance_score:
-          nutrientScore === "" ? null : Number(nutrientScore),
       };
       const body_composition = {
         body_fat_percentage: fatPct === "" ? null : Number(fatPct),
@@ -514,12 +511,6 @@ export default function SpecialistDashboard() {
                   <ClinicalInput label="Fasting glucose" unit="mg/dL" value={glucose} onChange={(e) => setGlucose(e.target.value)} placeholder="92" />
                   <ClinicalInput label="Total cholesterol" unit="mg/dL" value={cholesterol} onChange={(e) => setCholesterol(e.target.value)} placeholder="185" />
                 </div>
-                <ClinicalInput
-                  label="Nutrient imbalance score"
-                  value={nutrientScore}
-                  onChange={(e) => setNutrientScore(e.target.value)}
-                  placeholder="6.5"
-                />
               </div>
             )}
 
@@ -690,6 +681,47 @@ export default function SpecialistDashboard() {
                     <span> · BMI {patientView.demographics.bmi}</span>
                   )}
                 </div>
+                {patientView.lifestyle && (
+                  <div>
+                    <span style={{ color: "var(--text-muted)" }}>Lifestyle: </span>
+                    {patientView.lifestyle.physical_activity_level && (
+                      <span>{patientView.lifestyle.physical_activity_level} activity · </span>
+                    )}
+                    {patientView.lifestyle.weekly_exercise_hours != null && (
+                      <span>{patientView.lifestyle.weekly_exercise_hours}h/wk exercise · </span>
+                    )}
+                    {patientView.lifestyle.daily_steps_reported != null && (
+                      <span>{patientView.lifestyle.daily_steps_reported} steps/day · </span>
+                    )}
+                    {patientView.lifestyle.sleep_quality_subjective && (
+                      <span>Sleep: {patientView.lifestyle.sleep_quality_subjective} · </span>
+                    )}
+                    {patientView.lifestyle.alcohol_consumption && (
+                      <span>Alcohol: {patientView.lifestyle.alcohol_consumption} · </span>
+                    )}
+                    {patientView.lifestyle.smoking_habit && (
+                      <span>Smoking: {patientView.lifestyle.smoking_habit}</span>
+                    )}
+                  </div>
+                )}
+                {patientView.preferences && (
+                  <div>
+                    <span style={{ color: "var(--text-muted)" }}>Preferences: </span>
+                    {patientView.preferences.preferred_cuisine && (
+                      <span>{patientView.preferences.preferred_cuisine} cuisine · </span>
+                    )}
+                    {Array.isArray(patientView.preferences.food_aversions) &&
+                      patientView.preferences.food_aversions.length > 0 && (
+                        <span>Aversions: {patientView.preferences.food_aversions.join(", ")} · </span>
+                      )}
+                    {patientView.preferences.cultural_religious_restrictions && (
+                      <span>{patientView.preferences.cultural_religious_restrictions} · </span>
+                    )}
+                    {patientView.preferences.goal && (
+                      <span>Goal: {patientView.preferences.goal}</span>
+                    )}
+                  </div>
+                )}
                 {patientView.daily_log?.["24h_food_diary_text"] && (
                   <div>
                     <div className="label-sm" style={{ marginBottom: 4 }}>24h food diary</div>

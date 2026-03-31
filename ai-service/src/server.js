@@ -6,6 +6,11 @@ import dotenv from "dotenv";
 dotenv.config();
 const app = express();
 const port = Number(process.env.PORT || 3000);
+const model = process.env.OLLAMA_MODEL || "llama3.2:3b";
+const numPredict =
+  process.env.OLLAMA_NUM_PREDICT != null
+    ? Number(process.env.OLLAMA_NUM_PREDICT)
+    : 350;
 const ollama = new Ollama({
   host: process.env.OLLAMA_HOST || "http://host.docker.internal:11434",
 });
@@ -19,8 +24,9 @@ app.post("/ask", async (req, res) => {
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
 
     const response = await ollama.chat({
-      model: "mistral",
+      model,
       messages: [{ role: "user", content: prompt }],
+      options: Number.isFinite(numPredict) ? { num_predict: numPredict } : undefined,
     });
     res.json({ result: response.message.content });
   } catch (error) {
@@ -48,11 +54,12 @@ app.post("/analyze-journal", async (req, res) => {
         - Respond only in English.`;
 
     const response = await ollama.chat({
-      model: "mistral",
+      model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Journal Entry: ${foodEntry}` },
       ],
+      options: Number.isFinite(numPredict) ? { num_predict: numPredict } : undefined,
     });
 
     res.status(200).json({
