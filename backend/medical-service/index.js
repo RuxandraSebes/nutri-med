@@ -13,11 +13,16 @@ app.get("/health", (_req, res) => {
 
 app.use("/", medicalRoutes);
 
+app.use((err, _req, res, _next) => {
+  const status = err.status || 500;
+  res.status(status).json({ error: err.message || "Server error" });
+});
+
 const PORT = process.env.MEDICAL_SERVICE_PORT || process.env.PORT || 3002;
 
 async function start() {
   await sequelize.authenticate();
-  await sequelize.sync();
+  await sequelize.sync({ alter: true });
   app.listen(PORT, () => console.log(`medical-service on :${PORT}`));
 }
 

@@ -1,17 +1,25 @@
 const express = require("express");
 const recommendationController = require("../controllers/recommendationController");
+const { requireAuth } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// POST /patients/:patientId/plan -> orchestrator fetches objects + stores plan
-router.post("/patients/:patientId/plan", (req, res, next) =>
-  recommendationController.generatePlan(req, res).catch(next),
+router.post(
+  "/patients/:patientId/plan",
+  requireAuth("specialist"),
+  recommendationController.generatePlan,
 );
 
-// GET /patients/:patientId/plan -> latest stored plan
-router.get("/patients/:patientId/plan", (req, res, next) =>
-  recommendationController.getLatest(req, res).catch(next),
+router.get(
+  "/patients/:patientId/plan",
+  requireAuth("patient", "specialist"),
+  recommendationController.getLatest,
+);
+
+router.patch(
+  "/patients/:patientId/plan/approve",
+  requireAuth("specialist"),
+  recommendationController.approvePlan,
 );
 
 module.exports = router;
-

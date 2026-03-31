@@ -15,6 +15,8 @@ module.exports = (sequelize) =>
       clinical_strategy: { type: DataTypes.TEXT, allowNull: true },
       meal_matrix: { type: DataTypes.JSON, allowNull: true },
       shopping_list: { type: DataTypes.JSON, allowNull: true },
+      llm_outputs: { type: DataTypes.JSON, allowNull: true },
+      target_macros: { type: DataTypes.JSON, allowNull: true },
       created_at: {
         type: DataTypes.DATE,
         allowNull: false,

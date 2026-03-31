@@ -13,11 +13,18 @@ app.get("/health", (_req, res) => {
 
 app.use("/", patientRoutes);
 
+app.use((err, _req, res, _next) => {
+  const status = err.status || 500;
+  res.status(status).json({ error: err.message || "Server error" });
+});
+
 const PORT = process.env.PATIENT_SERVICE_PORT || process.env.PORT || 3001;
 
 async function start() {
   await sequelize.authenticate();
-  await sequelize.sync();
+  // In dev: update existing tables to match current models.
+  // This prevents errors like "Unknown column public_patient_id".
+  await sequelize.sync({ alter: true });
   app.listen(PORT, () => console.log(`patient-service on :${PORT}`));
 }
 

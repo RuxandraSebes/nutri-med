@@ -4,7 +4,7 @@ async function createPlan(payload) {
   return await DietPlan.create(payload);
 }
 
-async function getLatestPlan(patientId) {
+async function getLatestPlanRow(patientId) {
   return await DietPlan.findOne({
     where: { patient_id: patientId },
     order: [["created_at", "DESC"]],
@@ -13,6 +13,5 @@ async function getLatestPlan(patientId) {
 
 module.exports = {
   createPlan,
-  getLatestPlan,
+  getLatestPlanRow,
 };
-

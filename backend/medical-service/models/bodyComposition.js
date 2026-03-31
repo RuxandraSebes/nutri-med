@@ -10,6 +10,7 @@ module.exports = (sequelize) =>
       water_pct: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
       muscle_mass_kg: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
       visceral_fat_level: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
+      metabolic_age: { type: DataTypes.DECIMAL(5, 2), allowNull: true },
     },
     {
       tableName: "body_composition",

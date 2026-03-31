@@ -5,6 +5,18 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Browser clients (Vite on :5173) call the gateway on another origin — enable CORS.
+const corsOrigin = process.env.CORS_ORIGIN || "*";
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", corsOrigin);
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 app.use(morgan("dev"));
 app.use(express.json({ limit: "1mb" }));
 
@@ -13,6 +25,8 @@ const services = {
   medical: process.env.MEDICAL_SERVICE_URL || "http://localhost:3002",
   recommendation:
     process.env.RECOMMENDATION_SERVICE_URL || "http://localhost:3003",
+  auth: process.env.AUTH_SERVICE_URL || "http://localhost:3010",
+  ai: process.env.AI_SERVICE_URL || "http://localhost:3011",
 };
 
 function filterRequestHeaders(headers) {
@@ -75,6 +89,10 @@ function createFetchProxy({ prefix, targetBaseUrl }) {
 }
 
 app.use(
+  "/api/auth",
+  createFetchProxy({ prefix: "/api/auth", targetBaseUrl: services.auth }),
+);
+app.use(
   "/api/patients",
   createFetchProxy({ prefix: "/api/patients", targetBaseUrl: services.patient }),
 );
@@ -87,6 +105,13 @@ app.use(
   createFetchProxy({
     prefix: "/api/recommendations",
     targetBaseUrl: services.recommendation,
+  }),
+);
+app.use(
+  "/api/ai",
+  createFetchProxy({
+    prefix: "/api/ai",
+    targetBaseUrl: services.ai,
   }),
 );
 

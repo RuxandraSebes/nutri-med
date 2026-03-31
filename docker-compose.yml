@@ -26,6 +26,23 @@ services:
       timeout: 5s
       retries: 20
 
+  auth-service:
+    build:
+      context: ./backend/auth-service
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: ${MYSQL_DB:-nutrimed}
+      MYSQL_USER: ${MYSQL_USER:-nutrimed}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nutrimed_pw}
+      AUTH_SERVICE_PORT: 3010
+      JWT_SECRET: ${JWT_SECRET:-nutri-med-dev-jwt-change-in-prod}
+    ports:
+      - "3010:3010"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
   patient-service:
     build:
       context: ./backend/patient-service
@@ -36,6 +53,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-nutrimed}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nutrimed_pw}
       PATIENT_SERVICE_PORT: 3001
+      JWT_SECRET: ${JWT_SECRET:-nutri-med-dev-jwt-change-in-prod}
     ports:
       - "3001:3001"
     depends_on:
@@ -52,6 +70,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-nutrimed}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nutrimed_pw}
       MEDICAL_SERVICE_PORT: 3002
+      JWT_SECRET: ${JWT_SECRET:-nutri-med-dev-jwt-change-in-prod}
     ports:
       - "3002:3002"
     depends_on:
@@ -70,6 +89,7 @@ services:
       RECOMMENDATION_SERVICE_PORT: 3003
       PATIENT_SERVICE_URL: http://patient-service:3001
       MEDICAL_SERVICE_URL: http://medical-service:3002
+      JWT_SECRET: ${JWT_SECRET:-nutri-med-dev-jwt-change-in-prod}
     ports:
       - "3003:3003"
     depends_on:
@@ -80,6 +100,15 @@ services:
       medical-service:
         condition: service_started
 
+  ai-service:
+    build:
+      context: ./ai-service
+    environment:
+      PORT: 3000
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+    ports:
+      - "3011:3000"
+
   api-gateway:
     build:
       context: ./backend/api-gateway
@@ -88,14 +117,20 @@ services:
       PATIENT_SERVICE_URL: http://patient-service:3001
       MEDICAL_SERVICE_URL: http://medical-service:3002
       RECOMMENDATION_SERVICE_URL: http://recommendation-service:3003
+      AUTH_SERVICE_URL: http://auth-service:3010
+      AI_SERVICE_URL: http://ai-service:3000
     ports:
       - "3000:3000"
     depends_on:
+      auth-service:
+        condition: service_started
       patient-service:
         condition: service_started
       medical-service:
         condition: service_started
       recommendation-service:
+        condition: service_started
+      ai-service:
         condition: service_started
 
   frontend:
