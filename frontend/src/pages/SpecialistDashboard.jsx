@@ -4,6 +4,7 @@ import Badge, { ConstraintPill, StatusBadge } from "../components/UI/Badge.jsx";
 import ClinicalInput from "../components/UI/ClinicalInput.jsx";
 import MarkdownContent from "../components/UI/MarkdownContent.jsx";
 import { aiApi, medicalApi, patientApi, recommendationApi } from "../api/baseFetch.js";
+import "./SpecialistDashboard.css";
 
 // ── Step config ───────────────────────────────────────────────────────────────
 const STEPS = [
@@ -337,7 +338,7 @@ export default function SpecialistDashboard() {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
+    <div className="specialistDashboardPage">
       {/* Page header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", marginBottom: 3 }}>

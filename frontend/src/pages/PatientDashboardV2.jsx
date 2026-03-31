@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import MarkdownContent from "../components/UI/MarkdownContent.jsx";
 import Button from "../components/UI/Button.jsx";
 import { patientApi, recommendationApi } from "../api/baseFetch.js";
+import "./PatientDashboardV2.css";
 
 function SectionTitle({ children }) {
   return (
@@ -84,7 +85,7 @@ export default function PatientDashboardV2() {
   }
 
   return (
-    <div style={{ maxWidth: 980, margin: "0 auto" }}>
+    <div className="patientDashboardPage">
       <div
         style={{
           marginBottom: 24,

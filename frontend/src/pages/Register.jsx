@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import Button from "../components/UI/Button.jsx";
 import ClinicalInput from "../components/UI/ClinicalInput.jsx";
+import "./Register.css";
 
 export default function Register() {
   const { register } = useAuth();
@@ -32,9 +33,9 @@ export default function Register() {
   }
 
   return (
-    <div style={{ maxWidth: 420, margin: "48px auto" }}>
+    <div className="registerPage">
       <div className="card">
-        <div className="card-body" style={{ padding: 28 }}>
+        <div className="card-body registerCardBody">
           <h1 className="title" style={{ fontSize: 22, marginBottom: 8 }}>
             Create account
           </h1>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { patientApi } from "../api/baseFetch.js";
 import Button from "../components/UI/Button.jsx";
 import ClinicalInput from "../components/UI/ClinicalInput.jsx";
+import "./PatientProfilePage.css";
 
 function SelectOther({
   label,
@@ -68,8 +69,6 @@ export default function PatientProfilePage() {
   const [culturalOther, setCulturalOther] = useState("");
   const [goal, setGoal] = useState("");
 
-  const [diary, setDiary] = useState("");
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -79,7 +78,7 @@ export default function PatientProfilePage() {
         const d = p.demographics || {};
         const l = p.lifestyle || {};
         const pr = p.preferences || {};
-        const dl = p.daily_log || {};
+        // Food diary is edited from the Patient Dashboard (single source in FE).
 
         setAge(d.age ?? "");
         const g = d.gender || "Female";
@@ -153,7 +152,6 @@ export default function PatientProfilePage() {
         }
         setGoal(pr.goal || "");
 
-        setDiary(dl["24h_food_diary_text"] || "");
       } catch (e) {
         if (!cancelled) setError(e.message || "Could not load profile");
       } finally {
@@ -199,15 +197,11 @@ export default function PatientProfilePage() {
         cultural_religious_restrictions: resolve(cultural, culturalOther),
         goal: goal.trim() || null,
       };
-      const daily_log = {
-        "24h_food_diary_text": diary.trim() || null,
-      };
 
       await patientApi.putMe({
         demographics,
         lifestyle,
         preferences,
-        daily_log,
       });
       setMsg("Profile saved.");
     } catch (err) {
@@ -226,13 +220,13 @@ export default function PatientProfilePage() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto" }}>
+    <div className="patientProfilePage">
       <h1 className="title" style={{ fontSize: 22, marginBottom: 8 }}>
         My health profile
       </h1>
       <p className="subtitle" style={{ marginBottom: 24 }}>
-        Demographics, lifestyle, preferences, and your 24h food diary. Use
-        “Other” where you need a custom answer.
+        Demographics, lifestyle, and preferences. Use “Other” where you need a
+        custom answer.
       </p>
 
       <form onSubmit={save}>
@@ -374,23 +368,6 @@ export default function PatientProfilePage() {
                 placeholder="e.g. Weight management and hormonal balance"
               />
             </label>
-          </div>
-        </div>
-
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-header">
-            <div className="section-title">24-hour food diary</div>
-          </div>
-          <div className="card-body">
-            <ClinicalInput label="What did you eat?" type="textarea">
-              <textarea
-                className="textarea"
-                style={{ minHeight: 120 }}
-                value={diary}
-                onChange={(e) => setDiary(e.target.value)}
-                placeholder="Breakfast: … Lunch: … Dinner: …"
-              />
-            </ClinicalInput>
           </div>
         </div>
 
