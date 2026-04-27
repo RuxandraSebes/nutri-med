@@ -1,0 +1,8 @@
+pandas
+langchain
+langchain-community
+langchain-huggingface
+chromadb
+sentence-transformers
+fastapi
+uvicorn
