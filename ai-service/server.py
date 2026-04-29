@@ -1,116 +1,70 @@
-import uvicorn
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from langchain_community.vectorstores import Chroma
+from flask import Flask, request, jsonify
+from langchain_ollama import ChatOllama
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_ollama import OllamaLLM
+from langchain_community.vectorstores import Chroma
+from langchain.chains.retrieval_qa.base import RetrievalQAfrom langchain.prompts import PromptTemplate
+import os
 
-app = FastAPI(title="NutriMed AI Service")
+app = Flask(__name__)
 
-# --- CONFIGURARE CORS ---
-# Permite Frontend-ului tău (React) să apeleze acest API
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# --- INIȚIALIZARE MODELE ȘI DB ---
-print("Se încarcă resursele AI...")
+# 1. Configurare Embeddings (Trebuie să fie IDENTICI cu cei de la ingestie)
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-# Încărcăm cele două baze de date vectoriale
-db_food = Chroma(
-    persist_directory="./db_nutritie", 
-    embedding_function=embeddings
-)
+# 2. Încărcăm bazele de date create de tine
+# Verifică dacă folderele există înainte de încărcare
+if os.path.exists("./db_nutritie"):
+    db_nutritie = Chroma(persist_directory="./db_nutritie", embedding_function=embeddings)
+    print("✅ Baza de date Nutriție încărcată.")
+else:
+    print("❌ Eroare: Folderul db_nutritie nu a fost găsit!")
 
-db_patients = Chroma(
-    persist_directory="./db_pacienti", 
-    embedding_function=embeddings, 
-    collection_name="patient_history"
-)
+if os.path.exists("./db_pacienti"):
+    db_pacienti = Chroma(
+        persist_directory="./db_pacienti", 
+        embedding_function=embeddings, 
+        collection_name="patient_history"
+    )
+    print("✅ Baza de date Pacienți încărcată.")
 
-# Modelul Mistral local prin Ollama
-llm = OllamaLLM(model="mistral")
+# 3. Configurăm modelul Mistral prin Ollama
+llm = ChatOllama(model="mistral", temperature=0.2)
 
-# --- MODELE DE DATE (Pydantic) ---
-class PatientData(BaseModel):
-    disease: str
-    restriction: str
-    age: int
-    weight: float
-    height: float
-    bmi: float
-    systolic: int
-    diastolic: int
-    cholesterol: float
-    sugar: float
-    allergies: str
+# 4. Definim formatul răspunsului (Prompt)
+template = """Ești un asistent medical expert în nutriție. Folosește contextul de mai jos pentru a răspunde la întrebare.
+Dacă nu găsești informația în context, spune că nu știi, nu încerca să ghicești.
 
-# --- RUTE API ---
+Context: {context}
+Întrebare: {question}
 
-@app.get("/")
-async def health_check():
-    return {"status": "online", "service": "NutriMed AI"}
+Răspuns profesional în limba română:"""
 
-@app.post("/ai/recommend")
-async def generate_recommendation(data: PatientData):
-    """
-    Endpoint principal care folosește Advanced RAG pentru a genera 
-    recomandări bazate pe istoric și baza de date nutrițională.
-    """
+QA_PROMPT = PromptTemplate(template=template, input_variables=["context", "question"])
+
+# 5. Endpoint pentru interogare RAG
+@app.route('/ask', methods=['POST'])
+def ask_ai():
+    data = request.json
+    user_query = data.get("query")
+    target_db = data.get("type", "nutritie") # Poate fi 'nutritie' sau 'pacienti'
+
+    if not user_query:
+        return jsonify({"error": "Lipsește query-ul"}), 400
+
+    # Alegem retriever-ul în funcție de baza de date dorită
+    retriever = db_nutritie.as_retriever() if target_db == "nutritie" else db_pacienti.as_retriever()
+
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm,
+        chain_type="stuff",
+        retriever=retriever,
+        chain_type_kwargs={"prompt": QA_PROMPT}
+    )
+
     try:
-        # 1. RETRIEVAL - Căutăm în ambele surse de date
-        # Căutăm pacienți similari (experiență anterioară)
-        patient_query = f"Pacient cu {data.disease} și restricție {data.restriction}"
-        similar_patients = db_patients.similarity_search(patient_query, k=2)
-        history_context = "\n".join([p.page_content for p in similar_patients])
-
-        # Căutăm alimente potrivite (baza de cunoștințe brută)
-        food_query = f"Alimente bogate în nutrienți pentru {data.disease} {data.restriction}"
-        relevant_foods = db_food.similarity_search(food_query, k=5)
-        food_context = "\n".join([f.page_content for f in relevant_foods])
-
-        # 2. AUGMENTATION - Construim prompt-ul complex
-        prompt = f"""
-        Ești un sistem expert de suport decizional medical nutrițional.
-        
-        PROFIL PACIENT ACTUAL:
-        - Afecțiune: {data.disease}
-        - Restricții: {data.restriction}
-        
-        ISTORIC MEDICAL SIMILAR (Cazuri rezolvate anterior):
-        {history_context}
-        
-        BAZĂ DE DATE ALIMENTE RELEVANTE:
-        {food_context}
-        
-        SARCINA TA:
-        1. Analizează istoricul similar pentru a vedea ce tip de dietă a funcționat.
-        2. Selectează cele mai potrivite alimente din lista de mai sus.
-        3. Generază un plan alimentar scurt (3-4 recomandări) în limba ROMÂNĂ.
-        4. Explică beneficiul medical pentru fiecare aliment ales în contextul bolii {data.disease}.
-
-        Răspunde profesional, ca un nutriționist.
-        """
-
-        # 3. GENERATION - Apelăm Mistral
-        response = llm.invoke(prompt)
-
-        return {
-            "recommendation": response,
-            "metadata": {
-                "similar_cases_found": len(similar_patients),
-                "foods_analyzed": len(relevant_foods)
-            }
-        }
+        response = qa_chain.invoke(user_query)
+        return jsonify({"result": response["result"]})
     except Exception as e:
-        return {"error": str(e)}
+        return jsonify({"error": str(e)}), 500
 
-# --- PORNIRE SERVER ---
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5001)
