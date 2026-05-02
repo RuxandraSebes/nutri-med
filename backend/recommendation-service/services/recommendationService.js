@@ -1,9 +1,11 @@
 const dietPlanRepository = require("../repositories/dietPlanRepository");
+const { calculateTDEE } = require("./tdee");
 
 const PATIENT_SERVICE_URL =
   process.env.PATIENT_SERVICE_URL || "http://localhost:3001";
 const MEDICAL_SERVICE_URL =
   process.env.MEDICAL_SERVICE_URL || "http://localhost:3002";
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:5001";
 
 async function fetchJson(url, init = {}) {
   const resp = await fetch(url, {
@@ -45,43 +47,102 @@ async function assembleOrchestratorInput(patientId) {
   );
   const specialist = await fetchJson(
     `${MEDICAL_SERVICE_URL}/patients/${patientId}/specialist-object`,
-  );
+  ).catch(() => null); // medical data is optional at plan-generation time
+
   return { patient, specialist };
 }
 
-function computeTargetMacros(patient) {
-  const demo = patient?.demographics || {};
-  const age = Number(demo.age) || 30;
-  const h = Number(demo.height_cm) || 170;
-  const w = Number(demo.weight_kg) || 70;
-  const g = String(demo.gender || "").toLowerCase();
-  const isMale = g.includes("male") && !g.includes("female");
-  const s = isMale ? 5 : -161;
-  const bmr = 10 * w + 6.25 * h - 5 * age + s;
-  const act = String(
-    patient?.lifestyle?.physical_activity_level ||
-      patient?.lifestyle?.activity_level ||
-      "",
-  ).toLowerCase();
-  let factor = 1.3;
-  if (act.includes("sedentary") || act.includes("low")) factor = 1.2;
-  if (act.includes("active") || act.includes("high")) factor = 1.55;
-  if (act.includes("very") || act.includes("athlete")) factor = 1.725;
-  const kcal = Math.round(bmr * factor);
-  const protein = Math.round(w * 1.6);
-  const fat = Math.round((kcal * 0.28) / 9);
-  const carbs = Math.round((kcal - protein * 4 - fat * 9) / 4);
+/**
+ * Call the Python AI service to generate the 7×4 RAG nutrition matrix.
+ * Falls back to stub plan if AI service is unavailable.
+ */
+async function callRagMatrix(patientId) {
+  const url = `${AI_SERVICE_URL}/generate-matrix`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify({ patientId }),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(
+      `AI service /generate-matrix failed ${resp.status}: ${text}`,
+    );
+  }
+
+  return await resp.json();
+}
+
+/**
+ * Convert the RAG matrix response into the internal plan shape.
+ */
+function ragMatrixToPlanShape(ragResult, patient) {
+  const { matrix, tdee, clinical_notes, foods_used } = ragResult;
+
+  // Build a flat meal list for the "meal_matrix.meals" field (first day preview)
+  const MEAL_TIMES = {
+    Breakfast: "08:00",
+    "Morning Snack": "10:30",
+    Lunch: "13:00",
+    Dinner: "19:00",
+  };
+
+  const DAYS = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
+
+  // Flatten for the meal_matrix.meals array (first day for UI compat)
+  const firstDay = matrix[DAYS[0]] || {};
+  const meals = Object.entries(firstDay)
+    .filter(([key]) => key !== "day_total_kcal")
+    .map(([mealName, mealData]) => ({
+      time: MEAL_TIMES[mealName] || "00:00",
+      name: (mealData.foods || []).map((f) => f.name).join(" + "),
+      notes: `${mealData.meal_kcal || 0} kcal`,
+      foods: mealData.foods || [],
+    }));
+
+  // Build shopping list from foods_used
+  const shopping_list = (foods_used || []).map((item) => ({
+    item,
+    qty: "as needed",
+  }));
+
   return {
-    kcal,
-    protein_g: protein,
-    carbs_g: Math.max(80, carbs),
-    fat_g: fat,
-    method: "Mifflin-St Jeor × activity factor (stub)",
+    clinical_strategy:
+      clinical_notes || "RAG-generated personalized nutrition plan.",
+    meal_matrix: {
+      day: "7-day plan",
+      meals,
+      weekly: matrix,
+      context: {
+        activity_level: patient?.lifestyle?.activity_level || null,
+        tdee: tdee?.kcal || null,
+      },
+    },
+    shopping_list,
+    llm_outputs: {
+      clinical_logic: clinical_notes || "",
+      culinary_creative:
+        "Meal plan generated using RAG with nutritional database context.",
+      rag_retrieval: `Foods used from nutritional database: ${(foods_used || []).slice(0, 10).join(", ")}${foods_used?.length > 10 ? "…" : ""}`,
+    },
+    target_macros: tdee || null,
   };
 }
 
+/**
+ * Stub plan fallback (used when AI service is unavailable).
+ */
 function buildStubPlan({ patient, specialist }) {
-  const strat = `Nutrition strategy for ${specialist?.primary_disease || specialist?.icd10 || "general"} — pending specialist approval.`;
+  const strat = `Nutrition strategy for ${specialist?.primary_disease || specialist?.icd10 || "general"} — pending specialist approval. (Stub: AI service unavailable)`;
   return {
     clinical_strategy: strat,
     meal_matrix: {
@@ -105,8 +166,7 @@ function buildStubPlan({ patient, specialist }) {
       { item: "vegetables", qty: "1kg" },
     ],
     llm_outputs: {
-      clinical_logic:
-        "Dietary rules based on your clinical assessment.",
+      clinical_logic: "Dietary rules based on your clinical assessment.",
       culinary_creative:
         "Meal ideas and ingredient mapping aligned with the dietary rules.",
       rag_retrieval:
@@ -133,12 +193,34 @@ function rowToApi(row) {
 
 async function generateAndStorePlan(patientId, opts = {}) {
   const assembled = await assembleOrchestratorInput(patientId);
-  const plan = buildStubPlan(assembled);
-  const tdee = computeTargetMacros(assembled.patient);
-  plan.meal_matrix.context = {
-    ...plan.meal_matrix.context,
-    tdee: tdee.kcal,
-  };
+
+  let plan;
+  let ragResult = null;
+
+  // ── Try RAG first ──────────────────────────────────────────────────────────
+  try {
+    ragResult = await callRagMatrix(patientId);
+    plan = ragMatrixToPlanShape(ragResult, assembled.patient);
+    console.log(
+      `[recommendation] RAG matrix generated for patientId=${patientId}`,
+    );
+  } catch (ragErr) {
+    console.warn(
+      `[recommendation] RAG matrix failed, falling back to stub plan: ${ragErr.message}`,
+    );
+    // ── Fallback: stub plan ──────────────────────────────────────────────────
+    plan = buildStubPlan(assembled);
+
+    // Compute TDEE for context even in stub mode
+    const tdee = calculateTDEE(assembled.patient);
+    plan.meal_matrix.context = {
+      ...plan.meal_matrix.context,
+      tdee: tdee.kcal,
+    };
+  }
+
+  // ── Always compute TDEE from DB fields for target_macros ──────────────────
+  const tdee = calculateTDEE(assembled.patient);
 
   const created = await dietPlanRepository.createPlan({
     patient_id: patientId,
@@ -148,17 +230,21 @@ async function generateAndStorePlan(patientId, opts = {}) {
     meal_matrix: plan.meal_matrix,
     shopping_list: plan.shopping_list,
     llm_outputs: plan.llm_outputs,
-    target_macros: null,
+    target_macros: plan.target_macros || tdee,
   });
 
   return {
     plan_id: created.id,
     input: assembled,
+    rag: ragResult
+      ? { status: "success", tdee: ragResult.tdee }
+      : { status: "stub_fallback" },
     plan: {
       clinical_strategy: plan.clinical_strategy,
       meal_matrix: plan.meal_matrix,
       shopping_list: plan.shopping_list,
       llm_outputs: plan.llm_outputs,
+      target_macros: plan.target_macros || tdee,
     },
   };
 }
@@ -175,8 +261,9 @@ async function approveLatestPlan(patientId, specialistUserId, edited = {}) {
     err.status = 404;
     throw err;
   }
+
   const assembled = await assembleOrchestratorInput(patientId);
-  const target_macros = computeTargetMacros(assembled.patient);
+  const target_macros = calculateTDEE(assembled.patient);
 
   const update = {
     status: "approved",
@@ -184,9 +271,9 @@ async function approveLatestPlan(patientId, specialistUserId, edited = {}) {
     target_macros,
   };
 
-  // Specialist may optionally override the content (e.g. edited journal review).
   if (edited?.llm_outputs) update.llm_outputs = edited.llm_outputs;
-  if (edited?.clinical_strategy) update.clinical_strategy = edited.clinical_strategy;
+  if (edited?.clinical_strategy)
+    update.clinical_strategy = edited.clinical_strategy;
   if (edited?.meal_matrix) update.meal_matrix = edited.meal_matrix;
   if (edited?.shopping_list) update.shopping_list = edited.shopping_list;
 

@@ -1,10 +1,9 @@
 import { baseFetch } from "./baseFetch.js";
 
 export const aiApi = {
-  analyzeJournal: (foodEntry) =>
+  analyzeJournal: (payload) =>
     baseFetch("/api/ai/analyze-journal", {
       method: "POST",
-      body: { foodEntry },
+      body: payload,
     }),
 };
-

@@ -1,11 +1,12 @@
-FROM node:20-alpine
+FROM python:3.11-slim
 
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm install --omit=dev
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-ENV PORT=3000
-EXPOSE 3000
-CMD ["npm", "run", "start"]
 
+ENV PORT=5001
+EXPOSE 5001
+CMD ["python", "server.py"]

@@ -26,7 +26,9 @@ app.post("/ask", async (req, res) => {
     const response = await ollama.chat({
       model,
       messages: [{ role: "user", content: prompt }],
-      options: Number.isFinite(numPredict) ? { num_predict: numPredict } : undefined,
+      options: Number.isFinite(numPredict)
+        ? { num_predict: numPredict }
+        : undefined,
     });
     res.json({ result: response.message.content });
   } catch (error) {
@@ -37,40 +39,106 @@ app.post("/ask", async (req, res) => {
 
 app.post("/analyze-journal", async (req, res) => {
   try {
-    const { foodEntry } = req.body;
-    if (!foodEntry)
-      return res.status(400).json({ error: "foodEntry is required" });
+    let { journalEntries, patientDetails, specialistDetails } = req.body;
 
-    const systemPrompt = `You are a professional nutrition auditor. 
-        Analyze the provided food journal and return a response following this strict format:
-        1. SCORE: Provide a rating from 1 to 10 based on nutritional density and glycemic index (10 being perfect).
-        2. ANALYSIS: One short sentence explaining the score.
-        3. IMPROVED VERSION: Provide a version for 3 main meals: breakfast, lunch and dinner and 2 snacks, between the meals that fix the nutritional gaps found.
-        
-        Rules: 
-        - Do not use polite filler phrases or introductory sentences like "The user's food...".
-        - Do not provide general encouragement.
-        - Be direct, clinical, and precise.
-        - Respond only in English.`;
+    if (!journalEntries) {
+      return res.status(400).json({ error: "No journal entries provided" });
+    }
+
+    // ✅ FIX: support string OR array OR object
+    let journalText = "";
+
+    if (typeof journalEntries === "string") {
+      journalText = journalEntries;
+    } else if (Array.isArray(journalEntries)) {
+      journalText = journalEntries
+        .map((j) => `[${j.date || "unknown"}] ${j.text || ""}`)
+        .join("\n");
+    } else if (typeof journalEntries === "object") {
+      journalText = JSON.stringify(journalEntries, null, 2);
+    }
+
+    const prompt = `
+You are a professional nutrition auditor.
+   Analyze the provided food journal and patient context and return a response following this strict format:
+PATIENT:
+${JSON.stringify(patientDetails || {}, null, 2)}
+
+SPECIALIST CONTEXT:
+${JSON.stringify(specialistDetails || {}, null, 2)}
+
+JOURNAL:
+${journalText}
+
+Return STRICT format:
+
+SCORE: 1-10
+ANALYSIS: one sentence clinical summary
+IMPROVED VERSION:
+breakfast:
+lunch:
+dinner:
+snacks:
+`;
 
     const response = await ollama.chat({
       model,
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Journal Entry: ${foodEntry}` },
+        {
+          role: "system",
+          content:
+            "You are professional nutrition auditor. Be direct, clinical and precise.",
+        },
+        { role: "user", content: prompt },
       ],
-      options: Number.isFinite(numPredict) ? { num_predict: numPredict } : undefined,
+      options: Number.isFinite(numPredict)
+        ? { num_predict: numPredict }
+        : undefined,
     });
 
-    res.status(200).json({
-      success: true,
-      analysis: response.message.content,
-    });
+    res.json({ analysis: response.message.content });
   } catch (error) {
-    console.error("Inference Error:", error);
-    res.status(500).json({ success: false, error: "Internal Server Error" });
+    console.error(error);
+    res.status(500).json({ error: "Analysis failed" });
   }
 });
+
+// app.post("/analyze-journal", async (req, res) => {
+//   try {
+//     const { foodEntry } = req.body;
+//     if (!foodEntry)
+//       return res.status(400).json({ error: "foodEntry is required" });
+
+//     const systemPrompt = `You are a professional nutrition auditor.
+//         Analyze the provided food journal and return a response following this strict format:
+//         1. SCORE: Provide a rating from 1 to 10 based on nutritional density and glycemic index (10 being perfect).
+//         2. ANALYSIS: One short sentence explaining the score.
+//         3. IMPROVED VERSION: Provide a version for 3 main meals: breakfast, lunch and dinner and 2 snacks, between the meals that fix the nutritional gaps found.
+
+//         Rules:
+//         - Do not use polite filler phrases or introductory sentences like "The user's food...".
+//         - Do not provide general encouragement.
+//         - Be direct, clinical, and precise.
+//         - Respond only in English.`;
+
+//     const response = await ollama.chat({
+//       model,
+//       messages: [
+//         { role: "system", content: systemPrompt },
+//         { role: "user", content: `Journal Entry: ${foodEntry}` },
+//       ],
+//       options: Number.isFinite(numPredict) ? { num_predict: numPredict } : undefined,
+//     });
+
+//     res.status(200).json({
+//       success: true,
+//       analysis: response.message.content,
+//     });
+//   } catch (error) {
+//     console.error("Inference Error:", error);
+//     res.status(500).json({ success: false, error: "Internal Server Error" });
+//   }
+// });
 
 app.listen(port, () => {
   console.log(`Nutri-Med AI Service running at http://localhost:${port}`);

@@ -8,7 +8,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nutrimed_pw}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_pw}
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -114,14 +114,25 @@ services:
     build:
       context: ./ai-service
     environment:
-      PORT: 3000
+      PORT: 5001
       OLLAMA_HOST: ${OLLAMA_HOST:-http://ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
-      OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-350}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: ${MYSQL_DB:-nutrimed}
+      MYSQL_USER: ${MYSQL_USER:-nutrimed}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-nutrimed_pw}
+      CHROMA_NUTRITION_DIR: /app/db_nutritie
+      CHROMA_PATIENTS_DIR: /app/db_pacienti
     ports:
-      - "3011:3000"
+      - "3011:5001"
+    volumes:
+      - ./ai-service/db_nutritie:/app/db_nutritie
+      - ./ai-service/db_pacienti:/app/db_pacienti
     depends_on:
       ollama:
+        condition: service_healthy
+      mysql:
         condition: service_healthy
 
   api-gateway:
@@ -133,7 +144,7 @@ services:
       MEDICAL_SERVICE_URL: http://medical-service:3002
       RECOMMENDATION_SERVICE_URL: http://recommendation-service:3003
       AUTH_SERVICE_URL: http://auth-service:3010
-      AI_SERVICE_URL: http://ai-service:3000
+      AI_SERVICE_URL: http://ai-service:5001
     ports:
       - "3000:3000"
     depends_on:
