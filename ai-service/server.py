@@ -1,24 +1,29 @@
 """
 server.py — Flask AI service
 Endpoints:
-  GET  /health            → service + DB status
-  POST /ask               → RAG question against db_nutritie or db_pacienti
-  POST /analyze-journal   → food journal nutritional audit
-  POST /generate-matrix   → full 7×4 RAG Nutrition Matrix
+  GET  /health                 → service + DB status
+  POST /ask                    → RAG question against db_nutritie or db_pacienti
+  POST /analyze-journal        → food journal nutritional audit
+  POST /generate-matrix        → async job: 7×4 RAG Nutrition Matrix (202 + jobId)
+  GET  /matrix-status/<job_id> → poll job result
 """
+
+import json as json_lib
+import logging
+import os
+import threading
+import uuid
+from datetime import datetime, timezone
 
 from flask import Flask, request, jsonify
 from langchain_ollama import ChatOllama
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
-import os
-import logging
+from dotenv import load_dotenv
 
 from nutrition_matrix import generate_nutrition_matrix_sync
-from dotenv import load_dotenv
-from flask import Flask, request, jsonify
+from rag_service import _get_embeddings
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -26,8 +31,11 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# ── Embeddings ────────────────────────────────────────────────────────────────
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+# ── Job store (async matrix generation) ────────────────────────────────────────
+JOBS: dict = {}
+
+# ── Embeddings (shared singleton with RAG matrix pipeline) ───────────────────
+embeddings = _get_embeddings()
 
 # ── Vector DBs ────────────────────────────────────────────────────────────────
 if os.path.exists("./db_nutritie"):
@@ -59,8 +67,6 @@ llm = ChatOllama(
 )
 
 # ── RAG prompt template ───────────────────────────────────────────────────────
-# KEY CHANGE: LLM is allowed to supplement with general knowledge when the
-# retrieved context is incomplete, instead of saying "I don't know".
 QA_TEMPLATE = """Ești un asistent medical expert în nutriție.
 
 INSTRUCȚIUNI:
@@ -84,36 +90,56 @@ QA_PROMPT = PromptTemplate(
 )
 
 
+def _run_matrix_job(job_id: str, patient_id: int) -> None:
+    JOBS[job_id]["status"] = "running"
+    JOBS[job_id]["error"] = None
+    try:
+        result = generate_nutrition_matrix_sync(patient_id)
+        JOBS[job_id]["status"] = "done"
+        JOBS[job_id]["result"] = result
+    except Exception as e:
+        logger.exception(f"[/generate-matrix job {job_id}] failed: {e}")
+        JOBS[job_id]["status"] = "error"
+        JOBS[job_id]["error"] = str(e)
+        JOBS[job_id]["result"] = None
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({
-        "status":       "ok",
-        "db_nutritie":  db_nutritie is not None,
-        "db_pacienti":  db_pacienti is not None,
-    })
+    return jsonify(
+        {
+            "status": "ok",
+            "db_nutritie": db_nutritie is not None,
+            "db_pacienti": db_pacienti is not None,
+        }
+    )
 
 
 @app.route("/ask", methods=["POST"])
 def ask_ai():
-    data       = request.json or {}
+    data = request.json or {}
     user_query = data.get("query")
-    target_db  = data.get("type", "nutritie")  # "nutritie" | "pacienti"
+    target_db = data.get("type", "nutritie")
 
     if not user_query:
         return jsonify({"error": "Missing 'query'"}), 400
 
     db = db_nutritie if target_db == "nutritie" else db_pacienti
     if db is None:
-        return jsonify({
-            "error": f"Database '{target_db}' not loaded. "
-                     f"Run {'ingestion.py' if target_db == 'nutritie' else 'ingestion_patients.py'} first."
-        }), 503
+        return (
+            jsonify(
+                {
+                    "error": f"Database '{target_db}' not loaded. "
+                    f"Run {'ingestion.py' if target_db == 'nutritie' else 'ingestion_patients.py'} first."
+                }
+            ),
+            503,
+        )
 
     retriever = db.as_retriever(search_kwargs={"k": 5})
 
-    # Debug: log what was retrieved
     docs = retriever.invoke(user_query)
     logger.info(f"[/ask] Retrieved {len(docs)} docs for query: '{user_query[:80]}'")
     for d in docs[:2]:
@@ -128,8 +154,11 @@ def ask_ai():
 
     try:
         response = qa_chain.invoke({"query": user_query})
-        # Extract clean string result
-        result = response.get("result", str(response)) if isinstance(response, dict) else str(response)
+        result = (
+            response.get("result", str(response))
+            if isinstance(response, dict)
+            else str(response)
+        )
         return jsonify({"result": result})
     except Exception as e:
         logger.error(f"[/ask] Error: {e}")
@@ -138,27 +167,55 @@ def ask_ai():
 
 @app.route("/analyze-journal", methods=["POST"])
 def analyze_journal():
-    data       = request.json or {}
-    food_entry = data.get("foodEntry")
-
+    data = request.json or {}
+    food_entry = data.get("foodEntry") or data.get("food_entry")
+    if not food_entry and data.get("journalEntries"):
+        food_entry = data.get("journalEntries")
     if not food_entry:
-        return jsonify({"error": "Missing 'foodEntry'"}), 400
+        return (
+            jsonify(
+                {"error": "Missing food journal text (foodEntry or journalEntries)"}
+            ),
+            400,
+        )
+
+    patient_ctx = data.get("patientDetails") or data.get("patient_context")
+    specialist_ctx = data.get("specialistDetails") or data.get("specialist_context")
+
+    context_block = ""
+    if patient_ctx is not None:
+        try:
+            context_block += "\n\n### Patient context (use for personalization)\n" + json_lib.dumps(
+                patient_ctx, ensure_ascii=False, default=str
+            )[:6000]
+        except Exception:
+            context_block += "\n\n### Patient context\n" + str(patient_ctx)[:4000]
+    if specialist_ctx is not None:
+        try:
+            context_block += "\n\n### Specialist / clinical context\n" + json_lib.dumps(
+                specialist_ctx, ensure_ascii=False, default=str
+            )[:4000]
+        except Exception:
+            context_block += "\n\n### Specialist / clinical context\n" + str(
+                specialist_ctx
+            )[:2000]
 
     system_prompt = (
         "You are a professional nutrition auditor. "
-        "Analyze the provided food journal and return a response following this strict format:\n"
-        "1. SCORE: Provide a rating from 1 to 10 based on nutritional density and glycemic index "
-        "(10 being perfect).\n"
-        "2. ANALYSIS: One short sentence explaining the score.\n"
-        "3. IMPROVED VERSION: Provide a version for 3 main meals: breakfast, lunch and dinner "
-        "and 2 snacks between the meals that fix the nutritional gaps found.\n\n"
+        "Use PATIENT and SPECIALIST context to tailor sodium/sugar emphasis, calories, and allergens. "
+        "Analyze the food journal and return a response following this strict format:\n"
+        "1. SCORE: Rating 1–10 (nutritional density + glycemic appropriateness for this patient).\n"
+        "2. ANALYSIS: One short sentence explaining the score using the clinical context where relevant.\n"
+        "3. IMPROVED VERSION: Breakfast, lunch, dinner, and two snacks that address gaps while respecting "
+        "constraints implied by the contexts.\n\n"
         "Rules:\n"
-        "- Do not use polite filler phrases or introductory sentences.\n"
+        "- No filler or encouragement.\n"
         "- Be direct, clinical, and precise.\n"
-        "- Respond only in English."
+        "- English only.\n"
+        "- If context mentions hypertension or diabetes, comment on sodium/sugar explicitly."
     )
 
-    full_prompt = f"{system_prompt}\n\nJournal Entry: {food_entry}"
+    full_prompt = f"{system_prompt}{context_block}\n\n### Journal Entry\n{food_entry}"
 
     try:
         response = llm.invoke(full_prompt)
@@ -172,11 +229,9 @@ def analyze_journal():
 @app.route("/generate-matrix", methods=["POST"])
 def generate_matrix():
     """
-    POST /generate-matrix
-    Body: { "patientId": <int> }
-    Returns a full 7×4 RAG-generated nutrition matrix.
+    POST /generate-matrix — enqueue background matrix generation; return 202 + jobId.
     """
-    data       = request.json or {}
+    data = request.json or {}
     patient_id = data.get("patientId")
 
     if patient_id is None:
@@ -188,28 +243,53 @@ def generate_matrix():
         return jsonify({"error": "'patientId' must be an integer"}), 400
 
     if db_nutritie is None:
-        return jsonify({
-            "error": "ChromaDB nutrition database not loaded. Run ingestion.py first."
-        }), 503
+        return (
+            jsonify(
+                {
+                    "error": "ChromaDB nutrition database not loaded. Run ingestion.py first."
+                }
+            ),
+            503,
+        )
 
-    logger.info(f"[/generate-matrix] Starting RAG pipeline for patientId={patient_id}")
+    job_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    JOBS[job_id] = {
+        "status": "pending",
+        "result": None,
+        "error": None,
+        "patient_id": patient_id,
+        "created_at": now,
+    }
 
-    try:
-        result = generate_nutrition_matrix_sync(patient_id)
-        logger.info(f"[/generate-matrix] Success for patientId={patient_id}")
-        return jsonify(result)
-    except ValueError as e:
-        logger.error(f"[/generate-matrix] ValueError: {e}")
-        return jsonify({"error": str(e)}), 422
-    except RuntimeError as e:
-        logger.error(f"[/generate-matrix] RuntimeError: {e}")
-        return jsonify({"error": str(e)}), 503
-    except Exception as e:
-        logger.exception(f"[/generate-matrix] Unexpected error for patientId={patient_id}")
-        return jsonify({"error": f"Internal error: {str(e)}"}), 500
+    t = threading.Thread(
+        target=_run_matrix_job,
+        args=(job_id, patient_id),
+        daemon=True,
+    )
+    t.start()
+
+    return jsonify({"jobId": job_id, "status": "pending"}), 202
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+@app.route("/matrix-status/<job_id>", methods=["GET"])
+def matrix_status(job_id: str):
+    if job_id not in JOBS:
+        return jsonify({"error": "Unknown job_id"}), 404
+
+    job = JOBS[job_id]
+    st = job["status"]
+    out = {
+        "jobId": job_id,
+        "status": st,
+    }
+    if st == "done":
+        out["result"] = job.get("result")
+    if st == "error":
+        out["error"] = job.get("error") or "Unknown error"
+    return jsonify(out)
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5001))
     app.run(host="0.0.0.0", port=port, debug=False)

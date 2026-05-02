@@ -39,8 +39,13 @@ export default function PatientDashboardV2() {
       const data = await recommendationApi.getLatestPlan(recordId);
       setPlan(data);
     } catch (e) {
-      setError(e.message || "Could not load plan");
-      setPlan(null);
+      if (e.status === 404) {
+        setPlan(null);
+        setError("");
+      } else {
+        setError(e.message || "Could not load plan");
+        setPlan(null);
+      }
     } finally {
       setBusy(false);
     }
@@ -55,8 +60,13 @@ export default function PatientDashboardV2() {
         setProfile(me);
         setDiaryDraft(me?.daily_log?.["24h_food_diary_text"] || "");
         if (me?.record_id) {
-          const p = await recommendationApi.getLatestPlan(me.record_id);
-          if (!cancelled) setPlan(p);
+          try {
+            const p = await recommendationApi.getLatestPlan(me.record_id);
+            if (!cancelled) setPlan(p);
+          } catch (pe) {
+            if (!cancelled && pe.status !== 404) setError(pe.message || "Could not load plan");
+            if (!cancelled) setPlan(null);
+          }
         }
       } catch (e) {
         if (!cancelled) setError(e.message || "Could not load");

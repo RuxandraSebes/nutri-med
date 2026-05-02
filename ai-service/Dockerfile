@@ -9,4 +9,5 @@ COPY . .
 
 ENV PORT=5001
 EXPOSE 5001
-CMD ["python", "server.py"]
+# Long timeout: /generate-matrix can run RAG + LLM for several minutes
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-5001} --workers 1 --threads 2 --timeout 900 server:app"]

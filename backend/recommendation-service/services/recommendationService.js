@@ -1,11 +1,17 @@
 const dietPlanRepository = require("../repositories/dietPlanRepository");
 const { calculateTDEE } = require("./tdee");
+const { validateApprovedPlan } = require("./safetyValidation");
+const { consolidateShoppingList } = require("./shoppingListBuilder");
+const {
+  generateMatrix,
+  requestMatrix,
+  getMatrixJobStatus,
+} = require("../src/aiClient");
 
 const PATIENT_SERVICE_URL =
   process.env.PATIENT_SERVICE_URL || "http://localhost:3001";
 const MEDICAL_SERVICE_URL =
   process.env.MEDICAL_SERVICE_URL || "http://localhost:3002";
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:5001";
 
 async function fetchJson(url, init = {}) {
   const resp = await fetch(url, {
@@ -53,25 +59,15 @@ async function assembleOrchestratorInput(patientId) {
 }
 
 /**
- * Call the Python AI service to generate the 7×4 RAG nutrition matrix.
+ * Call the Python AI service (async job + poll) for the 7×4 RAG nutrition matrix.
  * Falls back to stub plan if AI service is unavailable.
  */
 async function callRagMatrix(patientId) {
-  const url = `${AI_SERVICE_URL}/generate-matrix`;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ patientId }),
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(
-      `AI service /generate-matrix failed ${resp.status}: ${text}`,
-    );
-  }
-
-  return await resp.json();
+  // Parallel Ollama batches on CPU often exceed 4–5 minutes; default 20 min.
+  const timeoutMs = Number(process.env.AI_MATRIX_POLL_TIMEOUT_MS || 1200000);
+  const intervalMs = Number(process.env.AI_MATRIX_POLL_INTERVAL_MS || 8000);
+  const maxAttempts = Number(process.env.AI_MATRIX_POLL_MAX_ATTEMPTS || 200);
+  return generateMatrix(patientId, { timeoutMs, intervalMs, maxAttempts });
 }
 
 /**
@@ -191,7 +187,92 @@ function rowToApi(row) {
   };
 }
 
+/**
+ * Start AI matrix job only (no polling). Frontend polls GET .../api/ai/matrix-status/:jobId.
+ */
+async function startPlanGeneration(patientId) {
+  return requestMatrix(patientId);
+}
+
+/**
+ * After matrix job is done, persist diet plan from AI job result.
+ */
+async function completePlanFromJob(patientId, jobId, opts = {}) {
+  const statusBody = await getMatrixJobStatus(jobId);
+
+  if (statusBody.status === "pending" || statusBody.status === "running") {
+    const err = new Error("Matrix job has not finished yet");
+    err.status = 409;
+    err.data = { status: statusBody.status };
+    throw err;
+  }
+  if (statusBody.status === "error") {
+    const err = new Error(statusBody.error || "Matrix generation failed");
+    err.status = 422;
+    throw err;
+  }
+  if (statusBody.status !== "done" || !statusBody.result) {
+    const err = new Error("Unexpected matrix job response");
+    err.status = 502;
+    throw err;
+  }
+
+  const ragResult = statusBody.result;
+  if (
+    ragResult.patient_id != null &&
+    Number(ragResult.patient_id) !== Number(patientId)
+  ) {
+    const err = new Error("Matrix result does not match requested patient");
+    err.status = 400;
+    throw err;
+  }
+
+  await dietPlanRepository.deletePendingPlansForPatient(patientId);
+
+  const assembled = await assembleOrchestratorInput(patientId);
+
+  let plan;
+  try {
+    plan = ragMatrixToPlanShape(ragResult, assembled.patient);
+    console.log(
+      `[recommendation] RAG matrix finalized from job ${jobId} patientId=${patientId}`,
+    );
+  } catch (mapErr) {
+    const err = new Error(mapErr.message || "Failed to map matrix to plan");
+    err.status = 422;
+    throw err;
+  }
+
+  const tdee = calculateTDEE(assembled.patient);
+
+  const created = await dietPlanRepository.createPlan({
+    patient_id: patientId,
+    specialist_id: opts.specialist_id ?? null,
+    status: "pending",
+    clinical_strategy: plan.clinical_strategy,
+    meal_matrix: plan.meal_matrix,
+    shopping_list: plan.shopping_list,
+    llm_outputs: plan.llm_outputs,
+    target_macros: plan.target_macros || tdee,
+  });
+
+  return {
+    plan_id: created.id,
+    input: assembled,
+    rag: { status: "success", tdee: ragResult.tdee, jobId },
+    plan: {
+      clinical_strategy: plan.clinical_strategy,
+      meal_matrix: plan.meal_matrix,
+      shopping_list: plan.shopping_list,
+      llm_outputs: plan.llm_outputs,
+      target_macros: plan.target_macros || tdee,
+    },
+  };
+}
+
 async function generateAndStorePlan(patientId, opts = {}) {
+  await dietPlanRepository.deletePendingPlansForPatient(patientId);
+
   const assembled = await assembleOrchestratorInput(patientId);
 
   let plan;
@@ -249,7 +330,11 @@ async function generateAndStorePlan(patientId, opts = {}) {
   };
 }
 
-async function getLatestPlan(patientId) {
+async function getLatestPlan(patientId, auth) {
+  if (auth?.role === "patient") {
+    const row = await dietPlanRepository.getLatestApprovedPlanRow(patientId);
+    return rowToApi(row);
+  }
   const row = await dietPlanRepository.getLatestPlanRow(patientId);
   return rowToApi(row);
 }
@@ -261,30 +346,84 @@ async function approveLatestPlan(patientId, specialistUserId, edited = {}) {
     err.status = 404;
     throw err;
   }
+  if (row.status !== "pending") {
+    const err = new Error("Latest plan is not in draft/review state");
+    err.status = 409;
+    throw err;
+  }
 
   const assembled = await assembleOrchestratorInput(patientId);
   const target_macros = calculateTDEE(assembled.patient);
+
+  const meal_matrix = edited.meal_matrix ?? row.meal_matrix;
+  const safety = validateApprovedPlan(
+    assembled.patient,
+    assembled.specialist,
+    meal_matrix,
+  );
+  if (!safety.ok) {
+    const err = new Error(safety.errors[0] || "Safety validation failed");
+    err.status = 400;
+    err.data = { errors: safety.errors, warnings: safety.warnings };
+    throw err;
+  }
+
+  const mergedShopping = consolidateShoppingList(meal_matrix);
 
   const update = {
     status: "approved",
     specialist_id: specialistUserId,
     target_macros,
+    shopping_list: mergedShopping,
+    meal_matrix,
+    clinical_strategy:
+      edited.clinical_strategy !== undefined
+        ? edited.clinical_strategy
+        : row.clinical_strategy,
+    llm_outputs:
+      edited.llm_outputs !== undefined ? edited.llm_outputs : row.llm_outputs,
   };
 
-  if (edited?.llm_outputs) update.llm_outputs = edited.llm_outputs;
-  if (edited?.clinical_strategy)
-    update.clinical_strategy = edited.clinical_strategy;
-  if (edited?.meal_matrix) update.meal_matrix = edited.meal_matrix;
-  if (edited?.shopping_list) update.shopping_list = edited.shopping_list;
-
   await row.update(update);
+  const api = rowToApi(await row.reload());
+  return { ...api, safety_warnings: safety.warnings };
+}
+
+async function updateDraftPlan(patientId, patch = {}) {
+  const row = await dietPlanRepository.getLatestPlanRow(patientId);
+  if (!row || row.status !== "pending") {
+    const err = new Error("No draft plan to update");
+    err.status = 404;
+    throw err;
+  }
+  const u = {};
+  if (patch.clinical_strategy != null) u.clinical_strategy = patch.clinical_strategy;
+  if (patch.meal_matrix != null) u.meal_matrix = patch.meal_matrix;
+  if (patch.shopping_list != null) u.shopping_list = patch.shopping_list;
+  if (patch.llm_outputs != null) u.llm_outputs = patch.llm_outputs;
+  if (patch.target_macros != null) u.target_macros = patch.target_macros;
+  await row.update(u);
   return rowToApi(await row.reload());
+}
+
+async function discardDraftPlan(patientId) {
+  const n = await dietPlanRepository.deletePendingPlansForPatient(patientId);
+  if (!n) {
+    const err = new Error("No draft plan to discard");
+    err.status = 404;
+    throw err;
+  }
+  return { discarded: n };
 }
 
 module.exports = {
   assembleOrchestratorInput,
+  startPlanGeneration,
+  completePlanFromJob,
   generateAndStorePlan,
   getLatestPlan,
   approveLatestPlan,
+  updateDraftPlan,
+  discardDraftPlan,
   assertCanAccessPatientPlan,
 };

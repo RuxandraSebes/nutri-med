@@ -11,7 +11,22 @@ async function getLatestPlanRow(patientId) {
   });
 }
 
+async function getLatestApprovedPlanRow(patientId) {
+  return await DietPlan.findOne({
+    where: { patient_id: patientId, status: "approved" },
+    order: [["created_at", "DESC"]],
+  });
+}
+
+async function deletePendingPlansForPatient(patientId) {
+  return await DietPlan.destroy({
+    where: { patient_id: patientId, status: "pending" },
+  });
+}
+
 module.exports = {
   createPlan,
   getLatestPlanRow,
+  getLatestApprovedPlanRow,
+  deletePendingPlansForPatient,
 };

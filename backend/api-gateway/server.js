@@ -1,5 +1,6 @@
 const express = require("express");
 const morgan = require("morgan");
+const { Agent, fetch: undiciFetch } = require("undici");
 require("dotenv").config();
 
 const app = express();
@@ -26,8 +27,34 @@ const services = {
   recommendation:
     process.env.RECOMMENDATION_SERVICE_URL || "http://localhost:3003",
   auth: process.env.AUTH_SERVICE_URL || "http://localhost:3010",
-  ai: process.env.AI_SERVICE_URL || "http://localhost:3011",
+  ai: process.env.AI_SERVICE_URL || "http://localhost:5001",
 };
+// Long-running plan generation (polls AI inside recommendation-service); align with AI_MATRIX_POLL_TIMEOUT_MS.
+const PROXY_TIMEOUT_MS = Number(process.env.GATEWAY_PROXY_TIMEOUT_MS || 1200000);
+
+/**
+ * Node's global fetch uses undici with default headersTimeout ≈ 300s, which breaks
+ * long POST /api/recommendations/.../plan before AbortController fires. Match Agent
+ * timeouts to the gateway proxy budget.
+ */
+const proxyDispatcher = new Agent({
+  headersTimeout: PROXY_TIMEOUT_MS,
+  bodyTimeout: PROXY_TIMEOUT_MS,
+  connectTimeout: Math.min(120000, PROXY_TIMEOUT_MS),
+});
+
+function proxyFetchErrorDetail(err) {
+  const parts = [];
+  if (err && typeof err === "object" && "message" in err) {
+    parts.push(String(err.message));
+  }
+  const c = err && typeof err === "object" && "cause" in err ? err.cause : null;
+  if (c && typeof c === "object" && "message" in c) {
+    parts.push(`cause: ${String(c.message)}`);
+    if (c.code) parts.push(`code: ${c.code}`);
+  }
+  return parts.filter(Boolean).join(" — ") || String(err);
+}
 
 function filterRequestHeaders(headers) {
   const filtered = {};
@@ -52,6 +79,8 @@ function filterResponseHeaders(headers) {
 
 function createFetchProxy({ prefix, targetBaseUrl }) {
   return async (req, res) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
     try {
       const downstreamPath = req.originalUrl.startsWith(prefix)
         ? req.originalUrl.slice(prefix.length) || "/"
@@ -63,6 +92,8 @@ function createFetchProxy({ prefix, targetBaseUrl }) {
       const init = {
         method,
         headers: filterRequestHeaders(req.headers),
+        signal: controller.signal,
+        dispatcher: proxyDispatcher,
       };
 
       if (method !== "GET" && method !== "HEAD") {
@@ -74,7 +105,7 @@ function createFetchProxy({ prefix, targetBaseUrl }) {
         }
       }
 
-      const resp = await fetch(url, init);
+      const resp = await undiciFetch(url, init);
       const buf = Buffer.from(await resp.arrayBuffer());
 
       res.status(resp.status);
@@ -83,7 +114,23 @@ function createFetchProxy({ prefix, targetBaseUrl }) {
       res.send(buf);
     } catch (err) {
       console.error("Gateway proxy error:", err);
-      res.status(502).json({ error: "Bad gateway" });
+      const causeCode =
+        err &&
+        typeof err === "object" &&
+        err.cause &&
+        typeof err.cause === "object" &&
+        err.cause.code;
+      const isUndiciHeadersTimeout = causeCode === "UND_ERR_HEADERS_TIMEOUT";
+      const isTimeout =
+        (err && typeof err === "object" && err.name === "AbortError") ||
+        isUndiciHeadersTimeout;
+      const detail = proxyFetchErrorDetail(err).slice(0, 500);
+      res.status(isTimeout ? 504 : 502).json({
+        error: isTimeout ? "Gateway timeout" : "Bad gateway",
+        detail,
+      });
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
 }

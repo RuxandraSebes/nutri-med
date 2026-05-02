@@ -11,6 +11,7 @@ services:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./backend/mysql-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
         [
@@ -89,6 +90,10 @@ services:
       RECOMMENDATION_SERVICE_PORT: 3003
       PATIENT_SERVICE_URL: http://patient-service:3001
       MEDICAL_SERVICE_URL: http://medical-service:3002
+      AI_SERVICE_URL: http://ai-service:5001
+      AI_MATRIX_POLL_TIMEOUT_MS: ${AI_MATRIX_POLL_TIMEOUT_MS:-1200000}
+      AI_MATRIX_POLL_INTERVAL_MS: ${AI_MATRIX_POLL_INTERVAL_MS:-8000}
+      AI_MATRIX_POLL_MAX_ATTEMPTS: ${AI_MATRIX_POLL_MAX_ATTEMPTS:-200}
       JWT_SECRET: ${JWT_SECRET:-nutri-med-dev-jwt-change-in-prod}
     ports:
       - "3003:3003"
@@ -117,6 +122,20 @@ services:
       PORT: 5001
       OLLAMA_HOST: ${OLLAMA_HOST:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral}
+      OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-8192}
+      OLLAMA_REPAIR_NUM_PREDICT: ${OLLAMA_REPAIR_NUM_PREDICT:-8192}
+      RAG_NUTRITION_TOP_K: ${RAG_NUTRITION_TOP_K:-6}
+      RAG_CONTEXT_MAX_CHARS: ${RAG_CONTEXT_MAX_CHARS:-12000}
+      RAG_MIN_DOCS: ${RAG_MIN_DOCS:-3}
+      RAG_SIMILAR_TOP_K: ${RAG_SIMILAR_TOP_K:-3}
+      RAG_SIMILAR_CTX_STRING_CAP: ${RAG_SIMILAR_CTX_STRING_CAP:-6000}
+      RAG_USE_METADATA_FILTER: ${RAG_USE_METADATA_FILTER:-1}
+      RAG_EMBED_CACHE: ${RAG_EMBED_CACHE:-1}
+      RAG_EMBED_CACHE_SIZE: ${RAG_EMBED_CACHE_SIZE:-4096}
+      RAG_RESPONSE_CACHE: ${RAG_RESPONSE_CACHE:-0}
+      RAG_RESPONSE_CACHE_SIZE: ${RAG_RESPONSE_CACHE_SIZE:-512}
+      ANONYMIZED_TELEMETRY: "False"
+      MATRIX_KCAL_TOLERANCE: ${MATRIX_KCAL_TOLERANCE:-150}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DB: ${MYSQL_DB:-nutrimed}
@@ -140,6 +159,7 @@ services:
       context: ./backend/api-gateway
     environment:
       PORT: 3000
+      GATEWAY_PROXY_TIMEOUT_MS: ${GATEWAY_PROXY_TIMEOUT_MS:-1200000}
       PATIENT_SERVICE_URL: http://patient-service:3001
       MEDICAL_SERVICE_URL: http://medical-service:3002
       RECOMMENDATION_SERVICE_URL: http://recommendation-service:3003

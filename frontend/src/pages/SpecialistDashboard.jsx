@@ -9,6 +9,15 @@ import {
   patientApi,
   recommendationApi,
 } from "../api/baseFetch.js";
+import { pollUntilMatrixDone } from "../api/recommendationApi.js";
+import { Button as ShadButton } from "@/components/shadcn/button.jsx";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/shadcn/card.jsx";
 import "./SpecialistDashboard.css";
 
 // ── Step config ───────────────────────────────────────────────────────────────
@@ -106,6 +115,7 @@ function ValidationBar({
   recordId,
   onDecision,
   onApprove,
+  onApproveError,
 }) {
   const [busy, setBusy] = useState(null);
 
@@ -116,7 +126,8 @@ function ValidationBar({
         await onApprove();
         onDecision("approve");
       } catch (e) {
-        console.error(e);
+        if (onApproveError) onApproveError(e);
+        else console.error(e);
       } finally {
         setBusy(null);
       }
@@ -174,7 +185,7 @@ function ValidationBar({
           loading={busy === "approve"}
           onClick={() => decide("approve")}
         >
-          ✓ Approve
+          Approve & publish
         </Button>
       </div>
     </div>
@@ -247,6 +258,9 @@ export default function SpecialistDashboard() {
   const [result, setResult] = useState(null);
   const [plan, setPlan] = useState(null);
   const [decision, setDecision] = useState(null);
+  const [planActionBusy, setPlanActionBusy] = useState(false);
+  const [planActionMsg, setPlanActionMsg] = useState("");
+  const [approveSafetyError, setApproveSafetyError] = useState("");
 
   const [searchQ, setSearchQ] = useState("");
   const [searchBusy, setSearchBusy] = useState(false);
@@ -259,7 +273,6 @@ export default function SpecialistDashboard() {
   const [comorbiditiesText, setComorbiditiesText] = useState("None");
   const [geneticText, setGeneticText] = useState("");
 
-  const [bpMmHg, setBpMmHg] = useState("");
   const [systolic, setSystolic] = useState("");
   const [diastolic, setDiastolic] = useState("");
   const [glucose, setGlucose] = useState("");
@@ -274,10 +287,6 @@ export default function SpecialistDashboard() {
   const [allergiesText, setAllergiesText] = useState("");
   const [restrictionsText, setRestrictionsText] = useState("");
   const [mandatoryNotes, setMandatoryNotes] = useState("");
-
-  const [cType, setCType] = useState("allergy");
-  const [cValue, setCValue] = useState("");
-  const [constraints, setConstraints] = useState([]);
 
   // Specialist journal review (generated from patient's diary, editable, then approved)
   const [journalBusy, setJournalBusy] = useState(false);
@@ -359,9 +368,7 @@ export default function SpecialistDashboard() {
         comorbidities: comorb.length ? comorb : ["None"],
         genetic_risk_factors: genetic.length ? genetic : [],
       };
-      const bp =
-        (bpMmHg && bpMmHg.trim()) ||
-        (systolic && diastolic ? `${systolic}/${diastolic}` : null);
+      const bp = systolic && diastolic ? `${systolic}/${diastolic}` : null;
       const biometric_markers = {
         blood_pressure_mmhg: bp,
         glucose_mg_dl: glucose === "" ? null : Number(glucose),
@@ -384,29 +391,97 @@ export default function SpecialistDashboard() {
         biometric_markers,
         body_composition,
         strict_constraints,
-        constraints,
       };
       const specObj = await medicalApi.saveClinical(selectedRecordId, payload);
       setResult(specObj);
 
-      const planData = await recommendationApi.generatePlan(
-        selectedRecordId,
-        {},
-      );
+      setPlanActionMsg("Starting meal matrix job…");
+      const start = await recommendationApi.generatePlan(selectedRecordId, {});
+      setPlanActionMsg("Generating matrix (this may take several minutes)…");
+      await pollUntilMatrixDone(start.jobId);
+      setPlanActionMsg("Saving draft plan…");
+      const planData = await recommendationApi.completePlan(selectedRecordId, {
+        jobId: start.jobId,
+      });
       setPlan(planData);
+      setPlanActionMsg("");
       setStep(1);
     } catch (e) {
       setError(e.message || "Failed to submit");
+      setPlanActionMsg("");
     } finally {
       setBusy(false);
     }
   }
 
-  function addConstraint() {
-    const v = cValue.trim();
-    if (!v) return;
-    setConstraints((xs) => [...xs, { type: cType, value: v }]);
-    setCValue("");
+  async function saveDraftToServer() {
+    if (!selectedRecordId || !plan?.plan) {
+      setPlanActionMsg("Generate a plan first.");
+      return;
+    }
+    setPlanActionBusy(true);
+    setPlanActionMsg("");
+    setApproveSafetyError("");
+    try {
+      await recommendationApi.updateDraft(selectedRecordId, {
+        llm_outputs: journalReview,
+        clinical_strategy: plan.plan.clinical_strategy,
+        meal_matrix: plan.plan.meal_matrix,
+        shopping_list: plan.plan.shopping_list,
+        target_macros: plan.plan.target_macros,
+      });
+      setPlanActionMsg("Draft saved.");
+    } catch (e) {
+      setPlanActionMsg(e.message || "Save failed");
+    } finally {
+      setPlanActionBusy(false);
+    }
+  }
+
+  async function regenerateDraft() {
+    if (!selectedRecordId) return;
+    setPlanActionBusy(true);
+    setPlanActionMsg("");
+    setApproveSafetyError("");
+    try {
+      setPlanActionMsg("Regenerating matrix…");
+      const start = await recommendationApi.regeneratePlan(selectedRecordId, {});
+      await pollUntilMatrixDone(start.jobId);
+      const planData = await recommendationApi.completePlan(selectedRecordId, {
+        jobId: start.jobId,
+      });
+      setPlan(planData);
+      setDecision(null);
+      setPlanActionMsg("New AI draft generated.");
+    } catch (e) {
+      setPlanActionMsg(e.message || "Regenerate failed");
+    } finally {
+      setPlanActionBusy(false);
+    }
+  }
+
+  async function discardDraft() {
+    if (!selectedRecordId) return;
+    if (
+      !window.confirm(
+        "Discard the current draft plan? This cannot be undone.",
+      )
+    )
+      return;
+    setPlanActionBusy(true);
+    setPlanActionMsg("");
+    setApproveSafetyError("");
+    try {
+      await recommendationApi.discardDraft(selectedRecordId);
+      setPlan(null);
+      setJournalReview(null);
+      setDecision(null);
+      setPlanActionMsg("Draft discarded.");
+    } catch (e) {
+      setPlanActionMsg(e.message || "Discard failed");
+    } finally {
+      setPlanActionBusy(false);
+    }
   }
 
   return (
@@ -440,10 +515,72 @@ export default function SpecialistDashboard() {
           onApprove={() =>
             recommendationApi.approvePlan(selectedRecordId, {
               llm_outputs: journalReview,
+              clinical_strategy: plan?.plan?.clinical_strategy,
+              meal_matrix: plan?.plan?.meal_matrix,
             })
           }
+          onApproveError={(e) => {
+            const details = e?.data?.details;
+            const msg =
+              details?.errors?.join?.("\n") ||
+              e.message ||
+              "Approval blocked";
+            setApproveSafetyError(msg);
+          }}
         />
       )}
+
+      {approveSafetyError ? (
+        <div
+          className="mb-3 rounded-lg border border-[var(--red-100)] bg-[var(--red-50)] px-4 py-3 text-sm text-[var(--red-700)]"
+          role="alert"
+        >
+          <strong>Safety check:</strong> {approveSafetyError}
+        </div>
+      ) : null}
+
+      {plan && selectedRecordId ? (
+        <Card className="mb-4 border-[var(--border)] bg-[var(--surface)]">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Draft plan actions</CardTitle>
+            <CardDescription>
+              Save your edits, regenerate a new AI draft, or discard before
+              publishing.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2 pt-0">
+            <ShadButton
+              type="button"
+              variant="secondary"
+              disabled={planActionBusy}
+              onClick={saveDraftToServer}
+            >
+              Save draft
+            </ShadButton>
+            <ShadButton
+              type="button"
+              variant="outline"
+              disabled={planActionBusy}
+              onClick={regenerateDraft}
+            >
+              Regenerate plan
+            </ShadButton>
+            <ShadButton
+              type="button"
+              variant="destructive"
+              disabled={planActionBusy}
+              onClick={discardDraft}
+            >
+              Discard draft
+            </ShadButton>
+            {planActionMsg ? (
+              <span className="text-sm text-[var(--text-secondary)] self-center">
+                {planActionMsg}
+              </span>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
       {decision && (
         <div
           style={{
@@ -643,26 +780,6 @@ export default function SpecialistDashboard() {
             {/* ── Step 2: Biomarkers ── */}
             {step === 2 && (
               <div style={{ display: "grid", gap: 14 }}>
-                <ClinicalInput
-                  label="Blood pressure (combined)"
-                  hint="Optional if you use systolic/diastolic below"
-                  value={bpMmHg}
-                  onChange={(e) => setBpMmHg(e.target.value)}
-                  placeholder="115/75"
-                />
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: "0.06em",
-                    textTransform: "uppercase",
-                    color: "var(--text-muted)",
-                    paddingBottom: 2,
-                    borderBottom: "1px solid var(--border)",
-                  }}
-                >
-                  Or separate readings
-                </div>
                 <div className="grid-2">
                   <ClinicalInput
                     label="Systolic"
@@ -791,92 +908,6 @@ export default function SpecialistDashboard() {
                     placeholder="Prioritize high-fiber foods…"
                   />
                 </label>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  Optional extra tags
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "130px 1fr auto",
-                    gap: 8,
-                    alignItems: "end",
-                  }}
-                >
-                  <ClinicalInput
-                    label="Type"
-                    type="select"
-                    value={cType}
-                    onChange={(e) => setCType(e.target.value)}
-                  >
-                    <option value="allergy">Allergy</option>
-                    <option value="restriction">Restriction</option>
-                  </ClinicalInput>
-                  <ClinicalInput
-                    label="Value"
-                    value={cValue}
-                    onChange={(e) => setCValue(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addConstraint()}
-                    placeholder="e.g. Peanuts / Low sodium"
-                  />
-                  <Button
-                    variant="primary"
-                    onClick={addConstraint}
-                    style={{ alignSelf: "flex-end" }}
-                  >
-                    Add
-                  </Button>
-                </div>
-
-                <div
-                  style={{
-                    background: "var(--gray-50)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius-md)",
-                    padding: "12px 14px",
-                    minHeight: 80,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "var(--text-muted)",
-                      marginBottom: 8,
-                    }}
-                  >
-                    Added constraints ({constraints.length})
-                  </div>
-                  {constraints.length === 0 ? (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "var(--text-muted)",
-                        fontStyle: "italic",
-                      }}
-                    >
-                      No constraints added yet.
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {constraints.map((c, i) => (
-                        <ConstraintPill
-                          key={i}
-                          type={c.type}
-                          value={c.value}
-                          onRemove={() =>
-                            setConstraints((xs) => xs.filter((_, j) => j !== i))
-                          }
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 
