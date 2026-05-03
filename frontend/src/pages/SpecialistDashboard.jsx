@@ -1,178 +1,275 @@
 import { useCallback, useEffect, useState } from "react";
-import Badge, { ConstraintPill } from "../components/UI/Badge.jsx";
 import ClinicalInputForm from "../components/ClinicalInputForm.jsx";
 import MealMatrix from "../components/MealMatrix.jsx";
 import PatientInsightView from "../components/PatientInsightView.jsx";
-import {
-  medicalApi,
-  patientApi,
-  recommendationApi,
-} from "../api/baseFetch.js";
+import { medicalApi, patientApi, recommendationApi } from "../api/baseFetch.js";
 import { pollUntilMatrixDone } from "../api/recommendationApi.js";
-import { Progress } from "@/components/shadcn/progress.jsx";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/shadcn/tabs.jsx";
 import "./SpecialistDashboard.css";
 
-function MatrixGenerationBanner({ elapsedSec }) {
-  const pseudoProgress = Math.min(
-    94,
-    8 + Math.min(elapsedSec, 720) / 10,
-  );
+/* ── tiny icon helper ─────────────────────────────────────────────────────── */
+function Icon({
+  d,
+  size = 16,
+  stroke = "currentColor",
+  fill = "none",
+  sw = 2,
+}) {
   return (
-    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 shadow-sm">
-      <Progress value={pseudoProgress} className="h-2.5" />
-      <p className="mt-2 text-xs text-amber-900">
-        Generating meal matrix… {elapsedSec}s elapsed
-      </p>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={fill}
+      stroke={stroke}
+      strokeWidth={sw}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={d} />
+    </svg>
+  );
+}
+
+const I = {
+  workspace:
+    "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18",
+  insights:
+    "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  meal: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+  check: "M20 6 9 17l-5-5",
+  alert:
+    "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
+  saved:
+    "M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8",
+  bio: "M22 12h-4l-3 9L9 3l-3 9H2",
+  body: "M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z",
+};
+
+function Spinner({ size = 14 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      className="sd-spin"
+    >
+      <circle cx="12" cy="12" r="10" strokeOpacity=".2" />
+      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* ── Generation banner ──────────────────────────────────────────────────── */
+function MatrixGenerationBanner({ elapsedSec }) {
+  const pct = Math.min(94, 8 + Math.min(elapsedSec, 720) / 10);
+  return (
+    <div className="sd-gen-banner">
+      <div className="sd-gen-bar-track">
+        <div className="sd-gen-bar-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="sd-gen-label">
+        Generating meal matrix… {elapsedSec}s elapsed — this usually takes
+        60–120 s
+      </div>
     </div>
   );
 }
 
-function splitList(s) {
-  return String(s || "")
-    .split(/[\n,]+/)
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-
-function BiomarkerCard({ label, value, unit, normalRange }) {
+/* ── Biomarker tile ─────────────────────────────────────────────────────── */
+function BiomarkerTile({ label, value, unit, normalRange }) {
   const hasVal = value !== null && value !== undefined && value !== "";
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="text-xs font-medium text-slate-500">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-slate-900">
-        {hasVal ? value : "–"}
-        {hasVal && (
-          <span className="text-sm font-normal text-slate-500">{unit}</span>
-        )}
+    <div className="sd-biomarker-tile">
+      <div className="sd-biomarker-label">{label}</div>
+      <div className="sd-biomarker-value">
+        {hasVal ? value : <span style={{ color: "#cbd5e1" }}>—</span>}
+        {hasVal && <span className="sd-biomarker-unit">&nbsp;{unit}</span>}
       </div>
-      {normalRange ? (
-        <div className="mt-1 text-[11px] text-slate-400">
-          Normal: {normalRange}
-        </div>
-      ) : null}
+      {normalRange && (
+        <div className="sd-biomarker-range">Normal: {normalRange}</div>
+      )}
     </div>
   );
 }
 
+/* ── Saved clinical object ──────────────────────────────────────────────── */
 function SavedClinicalObject({ result }) {
   if (!result) return null;
+
+  const severityVariant = (() => {
+    const s = String(result.severity || "").toLowerCase();
+    if (s === "severe" || s === "high") return "sd-badge-red";
+    if (s === "moderate") return "sd-badge-amber";
+    return "sd-badge-green";
+  })();
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-slate-900">
-          Saved clinical object
-        </h3>
-        <Badge variant="green" dot>
+    <div className="sd-saved-obj">
+      <div className="sd-saved-obj-header">
+        <div>
+          <div
+            style={{ fontSize: 14, fontWeight: 700, color: "var(--sd-text)" }}
+          >
+            Saved clinical object
+          </div>
+          <div
+            style={{ fontSize: 12, color: "var(--sd-text-3)", marginTop: 2 }}
+          >
+            Persisted to patient record · used for AI matrix generation
+          </div>
+        </div>
+        <span className="sd-badge sd-badge-green">
+          <span className="sd-badge-dot" style={{ background: "#22c55e" }} />
           Saved
-        </Badge>
+        </span>
       </div>
-      <div className="mt-4 grid gap-4">
-        <div className="flex flex-wrap gap-2">
+
+      <div
+        style={{
+          padding: "16px 20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+        }}
+      >
+        {/* Tags */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {(result.primary_disease || result.icd10) && (
-            <Badge variant="blue">{result.primary_disease || result.icd10}</Badge>
+            <span className="sd-badge sd-badge-indigo">
+              {result.primary_disease || result.icd10}
+            </span>
           )}
           {result.severity && (
-            <Badge
-              variant={
-                String(result.severity).toLowerCase() === "severe" ||
-                String(result.severity).toLowerCase() === "high"
-                  ? "red"
-                  : String(result.severity).toLowerCase() === "moderate"
-                    ? "amber"
-                    : "green"
-              }
-            >
+            <span className={`sd-badge ${severityVariant}`}>
               {result.severity}
-            </Badge>
+            </span>
           )}
         </div>
+
+        {/* Biomarkers */}
         {result.biomarkers && (
           <div>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: ".07em",
+                color: "var(--sd-text-3)",
+                marginBottom: 8,
+              }}
+            >
               Biometric markers
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <BiomarkerCard
+            <div className="sd-biomarker-grid">
+              <BiomarkerTile
                 label="Systolic BP"
                 value={result.biomarkers.systolic_bp}
-                unit=" mmHg"
+                unit="mmHg"
                 normalRange="90–120"
               />
-              <BiomarkerCard
+              <BiomarkerTile
                 label="Diastolic BP"
                 value={result.biomarkers.diastolic_bp}
-                unit=" mmHg"
+                unit="mmHg"
                 normalRange="60–80"
               />
-              <BiomarkerCard
+              <BiomarkerTile
                 label="Glucose"
                 value={result.biomarkers.glucose}
-                unit=" mg/dL"
+                unit="mg/dL"
                 normalRange="70–99"
               />
-              <BiomarkerCard
+              <BiomarkerTile
                 label="Cholesterol"
                 value={result.biomarkers.cholesterol}
-                unit=" mg/dL"
+                unit="mg/dL"
                 normalRange="< 200"
               />
             </div>
           </div>
         )}
+
+        {/* Body composition */}
         {result.body_composition && (
           <div>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: ".07em",
+                color: "var(--sd-text-3)",
+                marginBottom: 8,
+              }}
+            >
               Body composition
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <BiomarkerCard
-                label="Body fat %"
+            <div className="sd-biomarker-grid">
+              <BiomarkerTile
+                label="Body fat"
                 value={
                   result.body_composition.body_fat_percentage ??
                   result.body_composition.fat_pct
                 }
                 unit="%"
               />
-              <BiomarkerCard
-                label="Water %"
+              <BiomarkerTile
+                label="Water"
                 value={
                   result.body_composition.body_water_percentage ??
                   result.body_composition.water_pct
                 }
                 unit="%"
               />
-              <BiomarkerCard
+              <BiomarkerTile
                 label="Muscle mass"
                 value={result.body_composition.muscle_mass_kg}
-                unit=" kg"
+                unit="kg"
               />
-              <BiomarkerCard
+              <BiomarkerTile
                 label="Visceral fat"
                 value={result.body_composition.visceral_fat_level}
                 unit=""
               />
-              <BiomarkerCard
+              <BiomarkerTile
                 label="Metabolic age"
                 value={result.body_composition.metabolic_age}
-                unit=""
+                unit="yr"
               />
             </div>
           </div>
         )}
+
+        {/* Constraints */}
         {result.clinical_constraints?.length > 0 && (
           <div>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: ".07em",
+                color: "var(--sd-text-3)",
+                marginBottom: 8,
+              }}
+            >
               Clinical constraints
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {result.clinical_constraints.map((c, i) => (
-                <ConstraintPill key={i} type={c.type} value={c.value} />
+                <span
+                  key={i}
+                  className={`sd-pill ${c.type === "allergy" ? "sd-pill-allergy" : "sd-pill-restriction"}`}
+                >
+                  <span style={{ fontSize: 10 }}>
+                    {c.type === "allergy" ? "⚠" : "⊘"}
+                  </span>
+                  {c.value}
+                </span>
               ))}
             </div>
           </div>
@@ -182,6 +279,21 @@ function SavedClinicalObject({ result }) {
   );
 }
 
+/* ── Helpers ────────────────────────────────────────────────────────────── */
+function splitList(s) {
+  return String(s || "")
+    .split(/[\n,]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+const TABS = [
+  { id: "workspace", label: "Workspace", icon: I.workspace },
+  { id: "insights", label: "Patient insights", icon: I.insights },
+  { id: "meal", label: "Meal plan review", icon: I.meal },
+];
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
 export default function SpecialistDashboard() {
   const [dashboardData, setDashboardData] = useState({
     searchQ: "",
@@ -222,14 +334,12 @@ export default function SpecialistDashboard() {
   const [journalBusy, setJournalBusy] = useState(false);
   const [journalError, setJournalError] = useState("");
 
+  /* ── search ─────────────────────────────────────────────────────────── */
   const runSearch = useCallback(async () => {
     setSearchBusy(true);
     try {
       const { patients } = await patientApi.search(dashboardData.searchQ);
-      setDashboardData((d) => ({
-        ...d,
-        searchResults: patients || [],
-      }));
+      setDashboardData((d) => ({ ...d, searchResults: patients || [] }));
     } catch (e) {
       setError(e.message || "Search failed");
     } finally {
@@ -241,14 +351,12 @@ export default function SpecialistDashboard() {
     patientApi
       .search("")
       .then(({ patients }) =>
-        setDashboardData((d) => ({
-          ...d,
-          searchResults: patients || [],
-        })),
+        setDashboardData((d) => ({ ...d, searchResults: patients || [] })),
       )
       .catch(() => {});
   }, []);
 
+  /* ── load patient view ──────────────────────────────────────────────── */
   useEffect(() => {
     const rid = dashboardData.selectedRecordId;
     if (!rid) {
@@ -256,41 +364,40 @@ export default function SpecialistDashboard() {
       return;
     }
     let cancelled = false;
-    (async () => {
-      try {
-        const p = await patientApi.getForSpecialist(rid);
+    patientApi
+      .getForSpecialist(rid)
+      .then((p) => {
         if (!cancelled)
           setDashboardData((prev) => ({ ...prev, patientView: p }));
-      } catch {
+      })
+      .catch(() => {
         if (!cancelled)
           setDashboardData((prev) => ({ ...prev, patientView: null }));
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
   }, [dashboardData.selectedRecordId]);
 
   useEffect(() => {
-    setDashboardData((d) => ({
-      ...d,
-      journalReview: null,
-      decision: null,
-    }));
+    setDashboardData((d) => ({ ...d, journalReview: null, decision: null }));
   }, [dashboardData.selectedRecordId]);
 
+  /* ── elapsed timer ──────────────────────────────────────────────────── */
   useEffect(() => {
     if (!matrixJobInfo) {
       setMatrixElapsedSec(0);
       return;
     }
     const t0 = matrixJobInfo.startedAt;
-    const id = setInterval(() => {
-      setMatrixElapsedSec(Math.floor((Date.now() - t0) / 1000));
-    }, 1000);
+    const id = setInterval(
+      () => setMatrixElapsedSec(Math.floor((Date.now() - t0) / 1000)),
+      1000,
+    );
     return () => clearInterval(id);
   }, [matrixJobInfo]);
 
+  /* ── submit ─────────────────────────────────────────────────────────── */
   async function submit() {
     const {
       selectedRecordId,
@@ -316,60 +423,60 @@ export default function SpecialistDashboard() {
       setError("Select a patient first.");
       return;
     }
+
     setBusy(true);
     setError("");
+    setApproveSafetyError("");
     setDashboardData((d) => ({
       ...d,
       result: null,
       plan: null,
       decision: null,
     }));
+
     try {
       const comorb = splitList(comorbiditiesText);
       const genetic = splitList(geneticText);
-      const clinical_assessment = {
-        primary_disease: primaryDisease || null,
-        severity: severity || null,
-        comorbidities: comorb.length ? comorb : ["None"],
-        genetic_risk_factors: genetic.length ? genetic : [],
-      };
       const bp = systolic && diastolic ? `${systolic}/${diastolic}` : null;
-      const biometric_markers = {
-        blood_pressure_mmhg: bp,
-        glucose_mg_dl: glucose === "" ? null : Number(glucose),
-        cholesterol_mg_dl: cholesterol === "" ? null : Number(cholesterol),
-      };
-      const body_composition = {
-        body_fat_percentage: fatPct === "" ? null : Number(fatPct),
-        body_water_percentage: waterPct === "" ? null : Number(waterPct),
-        muscle_mass_kg: muscleKg === "" ? null : Number(muscleKg),
-        visceral_fat_level: visceral === "" ? null : Number(visceral),
-        metabolic_age: metabolicAge === "" ? null : Number(metabolicAge),
-      };
-      const strict_constraints = {
-        allergies: splitList(allergiesText),
-        dietary_restrictions: splitList(restrictionsText),
-        mandatory_clinical_notes: mandatoryNotes.trim() || null,
-      };
+
       const payload = {
-        clinical_assessment,
-        biometric_markers,
-        body_composition,
-        strict_constraints,
+        clinical_assessment: {
+          primary_disease: primaryDisease || null,
+          severity: severity || null,
+          comorbidities: comorb.length ? comorb : ["None"],
+          genetic_risk_factors: genetic.length ? genetic : [],
+        },
+        biometric_markers: {
+          blood_pressure_mmhg: bp,
+          glucose_mg_dl: glucose === "" ? null : Number(glucose),
+          cholesterol_mg_dl: cholesterol === "" ? null : Number(cholesterol),
+        },
+        body_composition: {
+          body_fat_percentage: fatPct === "" ? null : Number(fatPct),
+          body_water_percentage: waterPct === "" ? null : Number(waterPct),
+          muscle_mass_kg: muscleKg === "" ? null : Number(muscleKg),
+          visceral_fat_level: visceral === "" ? null : Number(visceral),
+          metabolic_age: metabolicAge === "" ? null : Number(metabolicAge),
+        },
+        strict_constraints: {
+          allergies: splitList(allergiesText),
+          dietary_restrictions: splitList(restrictionsText),
+          mandatory_clinical_notes: mandatoryNotes.trim() || null,
+        },
       };
+
       const specObj = await medicalApi.saveClinical(selectedRecordId, payload);
       setDashboardData((d) => ({ ...d, result: specObj }));
 
       setPlanActionMsg("Starting meal matrix job…");
       const start = await recommendationApi.generatePlan(selectedRecordId, {});
-      const matrixJobId = start.jobId;
       setMatrixJobInfo({ startedAt: Date.now() });
       setPlanActionMsg("Generating meal matrix…");
-      await pollUntilMatrixDone(matrixJobId);
+      await pollUntilMatrixDone(start.jobId);
       setMatrixJobInfo(null);
       setPlanActionMsg("Saving draft plan…");
       const planData = await recommendationApi.completePlan(selectedRecordId, {
-        jobId: matrixJobId,
+        jobId: start.jobId,
       });
       setDashboardData((d) => ({
         ...d,
@@ -380,16 +487,14 @@ export default function SpecialistDashboard() {
       setActiveTab("meal");
     } catch (e) {
       setMatrixJobInfo(null);
-      setError(
-        e.message ||
-          "Failed to submit — if a job was started, check logs or retry saving the draft later.",
-      );
+      setError(e.message || "Submit failed — check logs or retry.");
       setPlanActionMsg("");
     } finally {
       setBusy(false);
     }
   }
 
+  /* ── plan actions ───────────────────────────────────────────────────── */
   async function saveDraftToServer() {
     const { selectedRecordId, plan, journalReview } = dashboardData;
     if (!selectedRecordId || !plan?.plan) {
@@ -419,20 +524,18 @@ export default function SpecialistDashboard() {
     const { selectedRecordId } = dashboardData;
     if (!selectedRecordId) return;
     setPlanActionBusy(true);
-    setPlanActionMsg("");
+    setPlanActionMsg("Regenerating matrix…");
     setApproveSafetyError("");
     try {
-      setPlanActionMsg("Regenerating matrix…");
       const start = await recommendationApi.regeneratePlan(
         selectedRecordId,
         {},
       );
-      const regenJobId = start.jobId;
       setMatrixJobInfo({ startedAt: Date.now() });
-      await pollUntilMatrixDone(regenJobId);
+      await pollUntilMatrixDone(start.jobId);
       setMatrixJobInfo(null);
       const planData = await recommendationApi.completePlan(selectedRecordId, {
-        jobId: regenJobId,
+        jobId: start.jobId,
       });
       setDashboardData((d) => ({
         ...d,
@@ -484,62 +587,71 @@ export default function SpecialistDashboard() {
     }
   }
 
+  /* ── render ─────────────────────────────────────────────────────────── */
   return (
-    <div className="specialistDashboardPage flex flex-col gap-6 px-4 py-6">
-      <header>
-        <h1 className="text-[22px] font-extrabold tracking-tight text-slate-900">
-          Specialist Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Enter clinical data for the patient. The system generates an AI-assisted
-          diet matrix for your review and approval.
-        </p>
-      </header>
-
-      {matrixJobInfo ? (
-        <MatrixGenerationBanner elapsedSec={matrixElapsedSec} />
-      ) : null}
-
-      {approveSafetyError ? (
-        <div
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-sm"
-          role="alert"
-        >
-          <strong>Safety check:</strong> {approveSafetyError}
+    <div className="sd-page">
+      {/* ── Header ── */}
+      <div className="sd-page-header">
+        <div>
+          <h1 className="sd-page-title">Specialist Dashboard</h1>
+          <p className="sd-page-subtitle">
+            Enter clinical data · generate AI meal matrix · review and publish
+          </p>
         </div>
-      ) : null}
+      </div>
 
-      <Tabs
-        value={activeTab}
-        onValueChange={setActiveTab}
-        className="w-full"
-      >
-        <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">
-          <TabsTrigger value="workspace" className="text-xs sm:text-sm">
-            Workspace (input)
-          </TabsTrigger>
-          <TabsTrigger value="insights" className="text-xs sm:text-sm">
-            Patient insights
-          </TabsTrigger>
-          <TabsTrigger value="meal" className="text-xs sm:text-sm">
-            Meal plan review
-          </TabsTrigger>
-        </TabsList>
+      {/* ── Generation banner ── */}
+      {matrixJobInfo && (
+        <MatrixGenerationBanner elapsedSec={matrixElapsedSec} />
+      )}
 
-        <TabsContent value="workspace" className="mt-6 flex flex-col gap-6">
-          <ClinicalInputForm
-            dashboardData={dashboardData}
-            setDashboardData={setDashboardData}
-            searchBusy={searchBusy}
-            onSearch={runSearch}
-            submit={submit}
-            busy={busy}
-            error={error}
-          />
-          <SavedClinicalObject result={dashboardData.result} />
-        </TabsContent>
+      {/* ── Safety / approval error ── */}
+      {approveSafetyError && (
+        <div className="sd-alert sd-alert-error" role="alert">
+          <Icon d={I.alert} size={15} />
+          <div>
+            <strong>Safety check:</strong> {approveSafetyError}
+          </div>
+        </div>
+      )}
 
-        <TabsContent value="insights" className="mt-6">
+      {/* ── Tabs ── */}
+      <div className="sd-tab-bar">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            className={`sd-tab-btn ${activeTab === tab.id ? "active" : ""}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            <Icon d={tab.icon} size={14} />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ═══════ TAB: WORKSPACE ═══════ */}
+      {activeTab === "workspace" && (
+        <div className="sd-tab-content">
+          <div className="sd-clinical-wrap">
+            <ClinicalInputForm
+              dashboardData={dashboardData}
+              setDashboardData={setDashboardData}
+              searchBusy={searchBusy}
+              onSearch={runSearch}
+              submit={submit}
+              busy={busy}
+              error={error}
+            />
+            {dashboardData.result && (
+              <SavedClinicalObject result={dashboardData.result} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ TAB: PATIENT INSIGHTS ═══════ */}
+      {activeTab === "insights" && (
+        <div className="sd-tab-content">
           <PatientInsightView
             dashboardData={dashboardData}
             setDashboardData={setDashboardData}
@@ -548,9 +660,12 @@ export default function SpecialistDashboard() {
             journalError={journalError}
             setJournalError={setJournalError}
           />
-        </TabsContent>
+        </div>
+      )}
 
-        <TabsContent value="meal" className="mt-6">
+      {/* ═══════ TAB: MEAL PLAN REVIEW ═══════ */}
+      {activeTab === "meal" && (
+        <div className="sd-tab-content">
           <MealMatrix
             dashboardData={dashboardData}
             setDashboardData={setDashboardData}
@@ -563,7 +678,9 @@ export default function SpecialistDashboard() {
             onApproveError={(e) => {
               const details = e?.data?.details;
               const msg =
-                details?.errors?.join?.("\n") || e.message || "Approval blocked";
+                details?.errors?.join?.("\n") ||
+                e.message ||
+                "Approval blocked";
               setApproveSafetyError(msg);
             }}
             planActionBusy={planActionBusy}
@@ -573,25 +690,26 @@ export default function SpecialistDashboard() {
             discardDraft={discardDraft}
           />
 
-          {dashboardData.decision ? (
+          {dashboardData.decision && (
             <div
-              className={`mx-auto mt-4 max-w-6xl rounded-xl border px-4 py-3 text-sm font-semibold shadow-sm ${
+              className={`sd-alert sd-decision-follow ${
                 dashboardData.decision === "approve"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  ? "sd-alert-success"
                   : dashboardData.decision === "reject"
-                    ? "border-red-200 bg-red-50 text-red-700"
-                    : "border-amber-200 bg-amber-50 text-amber-800"
+                    ? "sd-alert-error"
+                    : "sd-alert-info"
               }`}
             >
+              <Icon d={I.check} size={15} />
               {dashboardData.decision === "approve"
-                ? "✓ Plan approved (macros computed)."
+                ? "Plan approved and published."
                 : dashboardData.decision === "reject"
-                  ? "✕ Plan rejected."
-                  : "✎ Plan flagged for modification."}
+                  ? "Plan rejected."
+                  : "Plan flagged for modification."}
             </div>
-          ) : null}
-        </TabsContent>
-      </Tabs>
+          )}
+        </div>
+      )}
     </div>
   );
 }

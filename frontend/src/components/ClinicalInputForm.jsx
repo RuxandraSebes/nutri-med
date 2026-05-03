@@ -1,71 +1,52 @@
 import { useState } from "react";
-import Button from "./UI/Button.jsx";
 
-/* ── shared classes ─────────────────────────────────────────────────────────── */
-const INPUT =
-  "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-400 transition-shadow";
-const LABEL =
-  "block text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1.5";
-
-/* ── section wrapper ────────────────────────────────────────────────────────── */
-function Section({ icon, title, children }) {
+/* ── tiny icon ──────────────────────────────────────────────────────────── */
+function Icon({ d, size = 15, stroke = "#6366f1", sw = 2.2 }) {
   return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1.5px solid #e2e8f0",
-        borderRadius: 14,
-        overflow: "hidden",
-        boxShadow: "0 1px 3px rgba(0,0,0,.06)",
-      }}
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={stroke}
+      strokeWidth={sw}
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "14px 20px",
-          borderBottom: "1px solid #f1f5f9",
-          background: "#fafafa",
-        }}
-      >
-        <span
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 9,
-            background: "#eef2ff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#6366f1"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d={icon} />
-          </svg>
-        </span>
-        <span style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
-          {title}
-        </span>
+      <path d={d} />
+    </svg>
+  );
+}
+
+const ICONS = {
+  search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35",
+  check: "M20 6 9 17l-5-5",
+  alert:
+    "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
+  diag: "M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2",
+  pulse: "M22 12h-4l-3 9L9 3l-3 9H2",
+  body: "M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z",
+  notes:
+    "M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z",
+  bolt: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
+};
+
+/* ── Section wrapper ────────────────────────────────────────────────────── */
+function Section({ iconPath, title, children }) {
+  return (
+    <div className="sd-section">
+      <div className="sd-section-head">
+        <div className="sd-section-icon">
+          <Icon d={iconPath} size={14} />
+        </div>
+        <span className="sd-section-title">{title}</span>
       </div>
-      <div style={{ padding: "18px 20px", display: "grid", gap: 14 }}>
-        {children}
-      </div>
+      <div className="sd-section-body">{children}</div>
     </div>
   );
 }
 
-/* ── metric card input ──────────────────────────────────────────────────────── */
+/* ── Metric card ────────────────────────────────────────────────────────── */
 function MetricCard({
   label,
   unit,
@@ -74,139 +55,57 @@ function MetricCard({
   placeholder,
   normalRange,
 }) {
-  const [focused, setFocused] = useState(false);
-  const hasValue = value !== "" && value !== null && value !== undefined;
-
   return (
-    <div
-      style={{
-        background: focused ? "#fafbff" : "#fff",
-        border: `1.5px solid ${focused ? "#a5b4fc" : "#e2e8f0"}`,
-        borderRadius: 10,
-        padding: "12px 14px",
-        boxShadow: focused
-          ? "0 0 0 3px rgba(99,102,241,.1)"
-          : "0 1px 2px rgba(0,0,0,.04)",
-        transition: "all .15s",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: ".06em",
-          color: "#94a3b8",
-          marginBottom: 6,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+    <div className="sd-metric-card">
+      <div className="sd-metric-label">{label}</div>
+      <div className="sd-metric-input-row">
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          style={{
-            flex: 1,
-            border: "none",
-            outline: "none",
-            padding: 0,
-            fontSize: 18,
-            fontWeight: 800,
-            color: "#0f172a",
-            background: "transparent",
-            letterSpacing: "-.02em",
-            minWidth: 0,
-          }}
+          className="sd-metric-input"
         />
-        {unit && (
-          <span
-            style={{
-              fontSize: 12,
-              color: "#94a3b8",
-              fontWeight: 600,
-              flexShrink: 0,
-            }}
-          >
-            {unit}
-          </span>
-        )}
+        {unit && <span className="sd-metric-unit">{unit}</span>}
       </div>
       {normalRange && (
-        <div style={{ marginTop: 5, fontSize: 11, color: "#94a3b8" }}>
-          Normal: {normalRange}
-        </div>
+        <div className="sd-metric-range">Normal: {normalRange}</div>
       )}
     </div>
   );
 }
 
-/* ── patient search result row ──────────────────────────────────────────────── */
+/* ── Patient row ────────────────────────────────────────────────────────── */
 function PatientRow({ patient, selected, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        width: "100%",
-        textAlign: "left",
-        padding: "11px 14px",
-        border: `1.5px solid ${selected ? "#6366f1" : "#e2e8f0"}`,
-        borderRadius: 10,
-        background: selected ? "#eef2ff" : "#fff",
-        boxShadow: selected ? "0 0 0 3px rgba(99,102,241,.12)" : "none",
-        cursor: "pointer",
-        transition: "all .15s",
-      }}
+      className={`sd-patient-row ${selected ? "selected" : ""}`}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div
+          className="sd-patient-avatar"
           style={{
-            width: 30,
-            height: 30,
-            borderRadius: 99,
-            flexShrink: 0,
             background: selected ? "#6366f1" : "#e2e8f0",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-            fontWeight: 800,
             color: selected ? "#fff" : "#64748b",
           }}
         >
           {(patient.public_patient_id || `#${patient.id}`)[0]}
         </div>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+        <div style={{ textAlign: "left" }}>
+          <div
+            style={{ fontSize: 13.5, fontWeight: 700, color: "var(--sd-text)" }}
+          >
             {patient.public_patient_id || `#${patient.id}`}
           </div>
-          <div style={{ fontSize: 12, color: "#94a3b8" }}>
+          <div style={{ fontSize: 11.5, color: "var(--sd-text-3)" }}>
             Record ID {patient.id}
           </div>
         </div>
       </div>
-      {selected && (
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="#6366f1"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M20 6 9 17l-5-5" />
-        </svg>
-      )}
+      {selected && <Icon d={ICONS.check} size={15} stroke="#6366f1" sw={2.5} />}
     </button>
   );
 }
@@ -225,106 +124,60 @@ export default function ClinicalInputForm({
   const set = (patch) => setDashboardData((prev) => ({ ...prev, ...patch }));
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 20,
-        maxWidth: 900,
-      }}
-    >
+    <div className="sd-clinical-inner">
       {/* ── Find patient ── */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1.5px solid #e2e8f0",
-          borderRadius: 16,
-          boxShadow: "0 1px 3px rgba(0,0,0,.06)",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "16px 22px",
-            borderBottom: "1px solid #f1f5f9",
-            background: "#fafafa",
-          }}
-        >
-          <span
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 9,
-              background: "#eef2ff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#6366f1"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.35-4.35" />
-            </svg>
-          </span>
+      <div className="sd-card">
+        <div className="sd-card-header">
+          <div className="sd-card-icon">
+            <Icon d={ICONS.search} size={15} />
+          </div>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
-              Find patient
-            </div>
-            <div style={{ fontSize: 12.5, color: "#94a3b8", marginTop: 1 }}>
+            <div className="sd-card-title">Find patient</div>
+            <div className="sd-card-subtitle">
               Search by public ID or numeric record ID
             </div>
           </div>
         </div>
-        <div
-          style={{
-            padding: "18px 22px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 14,
-          }}
-        >
-          <div style={{ display: "flex", gap: 10 }}>
+
+        <div className="sd-card-body">
+          {/* Search row */}
+          <div style={{ display: "flex", gap: 8 }}>
             <input
-              className={INPUT}
+              className="sd-input"
               placeholder="e.g. PT-00001 or record ID…"
               value={d.searchQ}
               onChange={(e) => set({ searchQ: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && onSearch()}
               style={{ flex: 1 }}
             />
-            <Button
-              variant="primary"
-              loading={searchBusy}
+            <button
+              type="button"
+              className="sd-btn sd-btn-primary"
               onClick={onSearch}
+              disabled={searchBusy}
               style={{ flexShrink: 0 }}
             >
+              {searchBusy ? (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  className="sd-spin"
+                >
+                  <circle cx="12" cy="12" r="10" strokeOpacity=".2" />
+                  <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                </svg>
+              ) : null}
               Search
-            </Button>
+            </button>
           </div>
 
+          {/* Results */}
           {d.searchResults?.length > 0 && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-                maxHeight: 240,
-                overflowY: "auto",
-                paddingRight: 4,
-              }}
-            >
+            <div className="sd-patient-results">
               {d.searchResults.map((p) => (
                 <PatientRow
                   key={p.id}
@@ -336,33 +189,23 @@ export default function ClinicalInputForm({
             </div>
           )}
 
+          {/* Selected confirmation */}
           {d.selectedRecordId && (
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
-                padding: "10px 14px",
+                padding: "9px 13px",
                 background: "#f0fdf4",
                 border: "1.5px solid #bbf7d0",
-                borderRadius: 10,
+                borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 700,
                 color: "#15803d",
               }}
             >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#22c55e"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M20 6 9 17l-5-5" />
-              </svg>
+              <Icon d={ICONS.check} size={14} stroke="#22c55e" sw={2.5} />
               Record #{d.selectedRecordId} selected
             </div>
           )}
@@ -370,95 +213,54 @@ export default function ClinicalInputForm({
       </div>
 
       {/* ── Clinical input form ── */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1.5px solid #e2e8f0",
-          borderRadius: 16,
-          boxShadow: "0 1px 3px rgba(0,0,0,.06)",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 10,
-            padding: "16px 22px",
-            borderBottom: "1px solid #f1f5f9",
-            background: "#fafafa",
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
-              Clinical input
-            </div>
-            <div style={{ fontSize: 12.5, color: "#94a3b8", marginTop: 1 }}>
-              Complete all sections, then submit to generate the AI meal matrix.
+      <div className="sd-card">
+        <div className="sd-card-header">
+          <div className="sd-card-icon">
+            <Icon d={ICONS.diag} size={15} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="sd-card-title">Clinical input</div>
+            <div className="sd-card-subtitle">
+              Complete all sections · AI generates meal matrix on submit
             </div>
           </div>
           {!d.selectedRecordId && (
-            <div
+            <span
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 7,
+                gap: 6,
                 background: "#fffbeb",
                 border: "1px solid #fde68a",
-                borderRadius: 8,
-                padding: "6px 12px",
-                fontSize: 12.5,
+                borderRadius: 7,
+                padding: "5px 11px",
+                fontSize: 12,
                 fontWeight: 600,
                 color: "#b45309",
               }}
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#f59e0b"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01" />
-              </svg>
+              <Icon d={ICONS.alert} size={12} stroke="#f59e0b" />
               Select a patient first
-            </div>
+            </span>
           )}
         </div>
 
-        <div
-          style={{
-            padding: "20px 22px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 18,
-            maxHeight: "68vh",
-            overflowY: "auto",
-          }}
-        >
+        <div className="sd-card-body">
           {/* Diagnosis */}
-          <Section
-            icon="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"
-            title="Diagnosis"
-          >
+          <Section iconPath={ICONS.diag} title="Diagnosis">
             <div>
-              <label className={LABEL}>Primary disease / ICD-10 label</label>
+              <label className="sd-label">Primary disease / ICD-10 label</label>
               <input
-                className={INPUT}
+                className="sd-input"
                 value={d.primaryDisease}
                 onChange={(e) => set({ primaryDisease: e.target.value })}
                 placeholder="e.g. PCOS, Type 2 Diabetes"
               />
             </div>
             <div>
-              <label className={LABEL}>Severity</label>
+              <label className="sd-label">Severity</label>
               <select
-                className={INPUT}
+                className="sd-input"
                 value={d.severity}
                 onChange={(e) => set({ severity: e.target.value })}
               >
@@ -469,11 +271,11 @@ export default function ClinicalInputForm({
               </select>
             </div>
             <div>
-              <label className={LABEL}>
+              <label className="sd-label">
                 Comorbidities (one per line or comma-separated)
               </label>
               <textarea
-                className={INPUT}
+                className="sd-input"
                 rows={2}
                 value={d.comorbiditiesText}
                 onChange={(e) => set({ comorbiditiesText: e.target.value })}
@@ -482,9 +284,9 @@ export default function ClinicalInputForm({
               />
             </div>
             <div>
-              <label className={LABEL}>Genetic / family risk factors</label>
+              <label className="sd-label">Genetic / family risk factors</label>
               <textarea
-                className={INPUT}
+                className="sd-input"
                 rows={2}
                 value={d.geneticText}
                 onChange={(e) => set({ geneticText: e.target.value })}
@@ -495,14 +297,8 @@ export default function ClinicalInputForm({
           </Section>
 
           {/* Biometric markers */}
-          <Section icon="M22 12h-4l-3 9L9 3l-3 9H2" title="Biometric markers">
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))",
-                gap: 10,
-              }}
-            >
+          <Section iconPath={ICONS.pulse} title="Biometric markers">
+            <div className="sd-metric-grid">
               <MetricCard
                 label="Systolic BP"
                 unit="mmHg"
@@ -539,17 +335,8 @@ export default function ClinicalInputForm({
           </Section>
 
           {/* Body composition */}
-          <Section
-            icon="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-            title="Body composition"
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))",
-                gap: 10,
-              }}
-            >
+          <Section iconPath={ICONS.body} title="Body composition">
+            <div className="sd-metric-grid">
               <MetricCard
                 label="Body fat"
                 unit="%"
@@ -589,14 +376,11 @@ export default function ClinicalInputForm({
           </Section>
 
           {/* Clinical constraints */}
-          <Section
-            icon="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"
-            title="Clinical constraints"
-          >
+          <Section iconPath={ICONS.notes} title="Clinical constraints">
             <div>
-              <label className={LABEL}>Allergies (comma or newline)</label>
+              <label className="sd-label">Allergies (comma or newline)</label>
               <textarea
-                className={INPUT}
+                className="sd-input"
                 rows={2}
                 value={d.allergiesText}
                 onChange={(e) => set({ allergiesText: e.target.value })}
@@ -605,9 +389,9 @@ export default function ClinicalInputForm({
               />
             </div>
             <div>
-              <label className={LABEL}>Dietary restrictions</label>
+              <label className="sd-label">Dietary restrictions</label>
               <textarea
-                className={INPUT}
+                className="sd-input"
                 rows={2}
                 value={d.restrictionsText}
                 onChange={(e) => set({ restrictionsText: e.target.value })}
@@ -616,13 +400,13 @@ export default function ClinicalInputForm({
               />
             </div>
             <div>
-              <label className={LABEL}>Mandatory clinical notes</label>
+              <label className="sd-label">Mandatory clinical notes</label>
               <textarea
-                className={INPUT}
+                className="sd-input"
                 rows={3}
                 value={d.mandatoryNotes}
                 onChange={(e) => set({ mandatoryNotes: e.target.value })}
-                placeholder="Prioritize high-fiber foods; avoid processed sugars…"
+                placeholder="Prioritise high-fibre foods; avoid processed sugars…"
                 style={{ resize: "vertical" }}
               />
             </div>
@@ -630,46 +414,42 @@ export default function ClinicalInputForm({
         </div>
 
         {/* Submit bar */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: 12,
-            padding: "16px 22px",
-            borderTop: "1px solid #f1f5f9",
-            background: "#fafafa",
-          }}
-        >
-          <Button
-            variant="green"
-            loading={busy}
-            disabled={!d.selectedRecordId}
+        <div className="sd-card-footer">
+          <button
+            type="button"
+            className="sd-btn sd-btn-green"
+            disabled={!d.selectedRecordId || busy}
             onClick={submit}
           >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-            </svg>
+            {busy ? (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                className="sd-spin"
+              >
+                <circle cx="12" cy="12" r="10" strokeOpacity=".2" />
+                <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <Icon d={ICONS.bolt} size={14} stroke="currentColor" />
+            )}
             Submit &amp; generate plan
-          </Button>
+          </button>
+
           {!d.selectedRecordId && (
-            <span style={{ fontSize: 13, color: "#94a3b8" }}>
+            <span style={{ fontSize: 12.5, color: "var(--sd-text-3)" }}>
               Select a patient above to enable submission
             </span>
           )}
+
           {error && (
             <span
               style={{
-                fontSize: 13,
+                fontSize: 12.5,
                 color: "#dc2626",
                 fontWeight: 600,
                 background: "#fef2f2",

@@ -1,28 +1,48 @@
-import Button from "./UI/Button.jsx";
-import Badge from "./UI/Badge.jsx";
-import { inputClass, labelClass } from "./specialistStyles.js";
 import { aiApi } from "../api/baseFetch.js";
+
+function Icon({ d, size = 15, stroke = "currentColor", sw = 2 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={stroke}
+      strokeWidth={sw}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={d} />
+    </svg>
+  );
+}
+
+const I = {
+  user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  bolt: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
+  diary:
+    "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
+  alert:
+    "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
+};
 
 function mapJournalAnalysisToReview(analysisText) {
   const text = String(analysisText || "").trim();
   if (!text) return null;
-
   const scoreMatch = text.match(/SCORE:\s*([^\n]+)/i);
   const analysisMatch = text.match(/ANALYSIS:\s*([^\n]+)/i);
   const improvedMatch = text.split(/IMPROVED VERSION:/i)[1];
-
   const clinical = [
     scoreMatch ? `**Score**: ${scoreMatch[1].trim()}/10` : null,
     analysisMatch ? `**Clinical note**: ${analysisMatch[1].trim()}` : null,
   ]
     .filter(Boolean)
     .join("\n\n");
-
   return {
     clinical_logic: clinical || "No specific clinical summary provided.",
     culinary_creative: improvedMatch ? improvedMatch.trim() : text,
     rag_retrieval:
-      "Guidance generated based on 24h food journal and clinical context.",
+      "Guidance generated from 24h food journal and clinical context.",
   };
 }
 
@@ -33,9 +53,40 @@ function splitList(s) {
     .filter(Boolean);
 }
 
-/**
- * Tab 2: patient demographics, diary, and editable journal-based review.
- */
+function Spinner({ size = 14 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      className="sd-spin"
+    >
+      <circle cx="12" cy="12" r="10" strokeOpacity=".2" />
+      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function InfoRow({ label, value }) {
+  if (!value && value !== 0) return null;
+  return (
+    <div style={{ display: "flex", gap: 8, fontSize: 13.5 }}>
+      <span style={{ color: "var(--sd-text-3)", minWidth: 170, flexShrink: 0 }}>
+        {label}
+      </span>
+      <span
+        style={{ color: "var(--sd-text)", fontWeight: 500, lineHeight: 1.5 }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
 export default function PatientInsightView({
   dashboardData,
   setDashboardData,
@@ -44,247 +95,376 @@ export default function PatientInsightView({
   journalError,
   setJournalError,
 }) {
-  const patientView = dashboardData.patientView;
-  const plan = dashboardData.plan;
-  const journalReview = dashboardData.journalReview;
+  const { patientView, plan, journalReview } = dashboardData;
+
+  async function analyzeJournal() {
+    setJournalBusy(true);
+    setJournalError("");
+    try {
+      const diary = patientView.daily_log?.["24h_food_diary_text"] || "";
+      const payload = {
+        journalEntries: diary,
+        patientDetails: {
+          patient_id: patientView.patient_id,
+          demographics: patientView.demographics,
+          lifestyle: patientView.lifestyle,
+          preferences: patientView.preferences,
+        },
+        specialistDetails: {
+          primary_disease: dashboardData.primaryDisease,
+          severity: dashboardData.severity,
+          comorbidities: splitList(dashboardData.comorbiditiesText),
+        },
+      };
+      const data = await aiApi.analyzeJournal(payload);
+      const mapped = mapJournalAnalysisToReview(data?.analysis || "");
+      if (!mapped) throw new Error("AI returned empty analysis");
+      setDashboardData((prev) => ({ ...prev, journalReview: mapped }));
+    } catch (e) {
+      setJournalError(e.message || "Could not analyze journal");
+    } finally {
+      setJournalBusy(false);
+    }
+  }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
-      <div className="rounded-xl border border-slate-200 border-l-4 border-l-indigo-500 bg-slate-50/80 p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 18,
+        maxWidth: 900,
+      }}
+    >
+      {/* ── Intro ── */}
+      <div className="sd-insight-intro">
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 700,
+            color: "var(--sd-text)",
+            marginBottom: 6,
+          }}
+        >
           Patient insights
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Use this view as a research workspace: cross-check the 24h diary with
-          lifestyle and preferences before you approve a plan. Journal analysis
-          drafts editable guidance you can refine in the fields below.
+        </div>
+        <p
+          style={{
+            fontSize: 13.5,
+            color: "var(--sd-text-2)",
+            lineHeight: 1.6,
+            margin: 0,
+          }}
+        >
+          Cross-check the 24h diary with lifestyle and preferences before
+          approving a plan. Journal analysis drafts editable guidance you can
+          refine in the fields below.
         </p>
       </div>
 
-      {patientView && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-base font-semibold text-slate-900">
-              Patient profile
-            </h3>
-            <Badge variant="blue">{patientView.patient_id}</Badge>
+      {/* ── Patient profile ── */}
+      {patientView ? (
+        <div className="sd-insight-card">
+          <div className="sd-insight-card-header">
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div className="sd-card-icon">
+                <Icon d={I.user} size={14} />
+              </div>
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "var(--sd-text)",
+                }}
+              >
+                Patient profile
+              </span>
+            </div>
+            <span className="sd-badge sd-badge-indigo">
+              {patientView.patient_id}
+            </span>
           </div>
-          <div className="mt-4 space-y-3 text-sm text-slate-700">
-            <p>
-              <span className="text-slate-500">Demographics: </span>
-              {patientView.demographics?.age != null && (
-                <span>Age {patientView.demographics.age} · </span>
-              )}
-              {patientView.demographics?.gender && (
-                <span>{patientView.demographics.gender} · </span>
-              )}
-              {patientView.demographics?.height_cm != null && (
-                <span>{patientView.demographics.height_cm} cm · </span>
-              )}
-              {patientView.demographics?.weight_kg != null && (
-                <span>{patientView.demographics.weight_kg} kg</span>
-              )}
-              {patientView.demographics?.bmi != null && (
-                <span> · BMI {patientView.demographics.bmi}</span>
-              )}
-            </p>
+
+          <div className="sd-insight-card-body">
+            {/* Demographics */}
+            {patientView.demographics && (
+              <div>
+                <div className="sd-label" style={{ marginBottom: 8 }}>
+                  Demographics
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <InfoRow
+                    label="Age"
+                    value={
+                      patientView.demographics.age != null
+                        ? `${patientView.demographics.age} yr`
+                        : null
+                    }
+                  />
+                  <InfoRow
+                    label="Gender"
+                    value={patientView.demographics.gender}
+                  />
+                  <InfoRow
+                    label="Height"
+                    value={
+                      patientView.demographics.height_cm != null
+                        ? `${patientView.demographics.height_cm} cm`
+                        : null
+                    }
+                  />
+                  <InfoRow
+                    label="Weight"
+                    value={
+                      patientView.demographics.weight_kg != null
+                        ? `${patientView.demographics.weight_kg} kg`
+                        : null
+                    }
+                  />
+                  <InfoRow label="BMI" value={patientView.demographics.bmi} />
+                </div>
+              </div>
+            )}
+
+            {/* Lifestyle */}
             {patientView.lifestyle && (
-              <p>
-                <span className="text-slate-500">Lifestyle: </span>
-                {patientView.lifestyle.physical_activity_level && (
-                  <span>
-                    {patientView.lifestyle.physical_activity_level} activity ·{" "}
-                  </span>
-                )}
-                {patientView.lifestyle.weekly_exercise_hours != null && (
-                  <span>
-                    {patientView.lifestyle.weekly_exercise_hours}h/wk exercise ·{" "}
-                  </span>
-                )}
-                {patientView.lifestyle.daily_steps_reported != null && (
-                  <span>
-                    {patientView.lifestyle.daily_steps_reported} steps/day ·{" "}
-                  </span>
-                )}
-                {patientView.lifestyle.sleep_quality_subjective && (
-                  <span>
-                    Sleep: {patientView.lifestyle.sleep_quality_subjective} ·{" "}
-                  </span>
-                )}
-                {patientView.lifestyle.alcohol_consumption && (
-                  <span>
-                    Alcohol: {patientView.lifestyle.alcohol_consumption} ·{" "}
-                  </span>
-                )}
-                {patientView.lifestyle.smoking_habit && (
-                  <span>Smoking: {patientView.lifestyle.smoking_habit}</span>
-                )}
-              </p>
+              <div>
+                <div className="sd-label" style={{ marginBottom: 8 }}>
+                  Lifestyle
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <InfoRow
+                    label="Physical activity"
+                    value={patientView.lifestyle.physical_activity_level}
+                  />
+                  <InfoRow
+                    label="Weekly exercise"
+                    value={
+                      patientView.lifestyle.weekly_exercise_hours != null
+                        ? `${patientView.lifestyle.weekly_exercise_hours} h/wk`
+                        : null
+                    }
+                  />
+                  <InfoRow
+                    label="Daily steps"
+                    value={patientView.lifestyle.daily_steps_reported}
+                  />
+                  <InfoRow
+                    label="Sleep quality"
+                    value={patientView.lifestyle.sleep_quality_subjective}
+                  />
+                  <InfoRow
+                    label="Alcohol"
+                    value={patientView.lifestyle.alcohol_consumption}
+                  />
+                  <InfoRow
+                    label="Smoking"
+                    value={patientView.lifestyle.smoking_habit}
+                  />
+                </div>
+              </div>
             )}
+
+            {/* Preferences */}
             {patientView.preferences && (
-              <p>
-                <span className="text-slate-500">Preferences: </span>
-                {patientView.preferences.preferred_cuisine && (
-                  <span>{patientView.preferences.preferred_cuisine} cuisine · </span>
-                )}
-                {Array.isArray(patientView.preferences.food_aversions) &&
-                  patientView.preferences.food_aversions.length > 0 && (
-                    <span>
-                      Aversions:{" "}
-                      {patientView.preferences.food_aversions.join(", ")} ·{" "}
-                    </span>
-                  )}
-                {patientView.preferences.cultural_religious_restrictions && (
-                  <span>
-                    {patientView.preferences.cultural_religious_restrictions} ·{" "}
-                  </span>
-                )}
-                {patientView.preferences.goal && (
-                  <span>Goal: {patientView.preferences.goal}</span>
-                )}
-              </p>
+              <div>
+                <div className="sd-label" style={{ marginBottom: 8 }}>
+                  Preferences
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <InfoRow
+                    label="Preferred cuisine"
+                    value={patientView.preferences.preferred_cuisine}
+                  />
+                  <InfoRow
+                    label="Cultural / religious"
+                    value={
+                      patientView.preferences.cultural_religious_restrictions
+                    }
+                  />
+                  <InfoRow
+                    label="Food aversions"
+                    value={
+                      Array.isArray(patientView.preferences.food_aversions) &&
+                      patientView.preferences.food_aversions.length > 0
+                        ? patientView.preferences.food_aversions.join(", ")
+                        : null
+                    }
+                  />
+                  <InfoRow
+                    label="Health goal"
+                    value={patientView.preferences.goal}
+                  />
+                </div>
+              </div>
             )}
+
+            {/* 24h diary (read-only) */}
             {patientView.daily_log?.["24h_food_diary_text"] && (
               <div>
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <div className="sd-label" style={{ marginBottom: 8 }}>
                   24h food diary
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm whitespace-pre-wrap text-slate-800">
+                <div className="sd-diary-readonly">
                   {patientView.daily_log["24h_food_diary_text"]}
                 </div>
               </div>
             )}
           </div>
         </div>
-      )}
-
-      {patientView?.daily_log?.["24h_food_diary_text"] ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-base font-semibold text-slate-900">
-              Journal analysis
-            </h3>
-            <Badge variant="gray">{plan?.status ?? "draft"}</Badge>
-          </div>
-          <p className="mt-2 text-sm text-slate-600">
-            Generate structured guidance from the diary, then edit fields before
-            saving the draft or publishing.
-          </p>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              variant="primary"
-              loading={journalBusy}
-              disabled={journalBusy}
-              onClick={async () => {
-                setJournalBusy(true);
-                setJournalError("");
-                try {
-                  const diary =
-                    patientView.daily_log?.["24h_food_diary_text"] || "";
-                  const payload = {
-                    journalEntries: diary,
-                    patientDetails: {
-                      patient_id: patientView.patient_id,
-                      demographics: patientView.demographics,
-                      lifestyle: patientView.lifestyle,
-                      preferences: patientView.preferences,
-                    },
-                    specialistDetails: {
-                      primary_disease: dashboardData.primaryDisease,
-                      severity: dashboardData.severity,
-                      comorbidities: splitList(dashboardData.comorbiditiesText),
-                    },
-                  };
-                  const data = await aiApi.analyzeJournal(payload);
-                  const mapped = mapJournalAnalysisToReview(data?.analysis || "");
-                  if (!mapped) throw new Error("AI returned empty analysis");
-                  setDashboardData((prev) => ({
-                    ...prev,
-                    journalReview: mapped,
-                  }));
-                } catch (e) {
-                  setJournalError(e.message || "Could not analyze journal");
-                } finally {
-                  setJournalBusy(false);
-                }
-              }}
-            >
-              Analyze food journal
-            </Button>
-          </div>
-
-          {journalError ? (
-            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-              {journalError}
-            </div>
-          ) : null}
-
-          {journalReview ? (
-            <div className="mt-6 grid gap-4">
-              <label className="block">
-                <span className={labelClass}>Diet rules &amp; priorities</span>
-                <textarea
-                  className={inputClass}
-                  rows={6}
-                  value={journalReview.clinical_logic || ""}
-                  onChange={(e) =>
-                    setDashboardData((prev) => ({
-                      ...prev,
-                      journalReview: {
-                        ...(prev.journalReview || {}),
-                        clinical_logic: e.target.value,
-                      },
-                    }))
-                  }
-                />
-              </label>
-              <label className="block">
-                <span className={labelClass}>Meal ideas</span>
-                <textarea
-                  className={inputClass}
-                  rows={5}
-                  value={journalReview.culinary_creative || ""}
-                  onChange={(e) =>
-                    setDashboardData((prev) => ({
-                      ...prev,
-                      journalReview: {
-                        ...(prev.journalReview || {}),
-                        culinary_creative: e.target.value,
-                      },
-                    }))
-                  }
-                />
-              </label>
-              <label className="block">
-                <span className={labelClass}>Reference guidance</span>
-                <textarea
-                  className={inputClass}
-                  rows={5}
-                  value={journalReview.rag_retrieval || ""}
-                  onChange={(e) =>
-                    setDashboardData((prev) => ({
-                      ...prev,
-                      journalReview: {
-                        ...(prev.journalReview || {}),
-                        rag_retrieval: e.target.value,
-                      },
-                    }))
-                  }
-                />
-              </label>
-            </div>
-          ) : (
-            <p className="mt-6 text-sm italic text-slate-500">
-              Run analysis to populate editable guidance fields.
-            </p>
-          )}
-        </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-          Select a patient with a 24h food diary to unlock journal analysis.
+        <div className="sd-empty">
+          <div className="sd-empty-icon">
+            <Icon d={I.user} size={26} stroke="#94a3b8" sw={1.5} />
+          </div>
+          <div className="sd-empty-title">No patient selected</div>
+          <div className="sd-empty-sub">
+            Search and select a patient in the Workspace tab.
+          </div>
         </div>
       )}
+
+      {/* ── Journal analysis ── */}
+      {patientView?.daily_log?.["24h_food_diary_text"] ? (
+        <div className="sd-insight-card">
+          <div className="sd-insight-card-header">
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div className="sd-card-icon" style={{ background: "#ecfdf5" }}>
+                <Icon d={I.bolt} size={14} stroke="#10b981" />
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: "var(--sd-text)",
+                  }}
+                >
+                  Journal analysis
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--sd-text-3)",
+                    marginTop: 1,
+                  }}
+                >
+                  AI-powered · editable before saving
+                </div>
+              </div>
+            </div>
+            <span className="sd-badge sd-badge-gray">
+              {plan?.status ?? "draft"}
+            </span>
+          </div>
+
+          <div className="sd-insight-card-body">
+            <button
+              type="button"
+              className="sd-btn sd-btn-primary"
+              onClick={analyzeJournal}
+              disabled={journalBusy}
+            >
+              {journalBusy ? (
+                <Spinner />
+              ) : (
+                <Icon d={I.bolt} size={13} stroke="currentColor" />
+              )}
+              Analyze food journal
+            </button>
+
+            {journalError && (
+              <div className="sd-alert sd-alert-error">
+                <Icon d={I.alert} size={14} />
+                {journalError}
+              </div>
+            )}
+
+            {journalReview ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 14,
+                  marginTop: 6,
+                }}
+              >
+                {[
+                  {
+                    key: "clinical_logic",
+                    label: "Diet rules & priorities",
+                    accent: "#6366f1",
+                  },
+                  {
+                    key: "culinary_creative",
+                    label: "Meal ideas",
+                    accent: "#10b981",
+                  },
+                  {
+                    key: "rag_retrieval",
+                    label: "Reference guidance",
+                    accent: "#0ea5e9",
+                  },
+                ].map(({ key, label, accent }) => (
+                  <div
+                    key={key}
+                    className="sd-llm-field"
+                    style={{ borderLeftColor: accent }}
+                  >
+                    <label
+                      className="sd-label"
+                      style={{ color: accent, marginBottom: 6 }}
+                    >
+                      {label}
+                    </label>
+                    <textarea
+                      className="sd-input"
+                      rows={key === "clinical_logic" ? 6 : 5}
+                      value={journalReview[key] || ""}
+                      onChange={(e) =>
+                        setDashboardData((prev) => ({
+                          ...prev,
+                          journalReview: {
+                            ...(prev.journalReview || {}),
+                            [key]: e.target.value,
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              !journalBusy && (
+                <p
+                  style={{
+                    fontSize: 13.5,
+                    fontStyle: "italic",
+                    color: "var(--sd-text-3)",
+                    marginTop: 4,
+                  }}
+                >
+                  Run analysis to populate editable guidance fields.
+                </p>
+              )
+            )}
+          </div>
+        </div>
+      ) : patientView ? (
+        <div
+          style={{
+            background: "var(--sd-bg)",
+            border: "1.5px dashed var(--sd-border)",
+            borderRadius: "var(--sd-radius)",
+            padding: "40px 24px",
+            textAlign: "center",
+            fontSize: 13.5,
+            color: "var(--sd-text-3)",
+          }}
+        >
+          This patient has no 24h food diary entry yet.
+        </div>
+      ) : null}
     </div>
   );
 }
