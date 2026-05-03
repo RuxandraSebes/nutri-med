@@ -4,9 +4,9 @@ nutrition_matrix.py
 POST /generate-matrix → generateNutritionMatrix(patientId)
 
 Sequential pipeline:
-  1. Patient context — MySQL.
-  2. Nutritional context — Chroma db_nutritie, compact lines, top_k (default 6 via RAG_NUTRITION_TOP_K).
-  3. Similar cases — Chroma db_pacienti (used only for a short clinical-notes LLM call).
+  1. Patient context — MySQL (includes specialist-entered constraints when saved on the record).
+  2. Nutritional context — Chroma db_nutritie unless MATRIX_SKIP_RAG=1 (testing without retrieval).
+  3. Similar cases — Chroma db_pacienti unless MATRIX_SKIP_RAG=1.
   4. TDEE — Mifflin–St Jeor × activity (Python only).
   5. LLM — three parallel JSON meal-matrix batches (similar cases excluded from batches);
           one small parallel call for clinical_notes.
@@ -30,17 +30,157 @@ from rag_service import getPatientContext, getNutritionalContext, getSimilarPati
 logger = logging.getLogger(__name__)
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 
 BATCH_1 = ["Monday", "Tuesday", "Wednesday"]
 BATCH_2 = ["Thursday", "Friday"]
 BATCH_3 = ["Saturday", "Sunday"]
 
-OLLAMA_BATCH_NUM_PREDICT = int(os.getenv("OLLAMA_BATCH_NUM_PREDICT", "3000"))
-OLLAMA_BATCH_NUM_CTX = int(os.getenv("OLLAMA_BATCH_NUM_CTX", "12000"))
+OLLAMA_BATCH_NUM_PREDICT = int(os.getenv("OLLAMA_BATCH_NUM_PREDICT", "1800"))
+OLLAMA_BATCH_NUM_CTX = int(os.getenv("OLLAMA_BATCH_NUM_CTX", "6000"))
 KCAL_TOLERANCE = float(os.getenv("MATRIX_KCAL_TOLERANCE", "150"))
+MATRIX_AUTO_SCALE_TDEE = os.getenv("MATRIX_AUTO_SCALE_TDEE", "1").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 RAG_NUTRITION_TOP_K = int(os.getenv("RAG_NUTRITION_TOP_K", "6"))
-OLLAMA_NOTES_NUM_PREDICT = int(os.getenv("OLLAMA_NOTES_NUM_PREDICT", "512"))
+OLLAMA_NOTES_NUM_PREDICT = int(os.getenv("OLLAMA_NOTES_NUM_PREDICT", "256"))
+
+# When true: skip Chroma (foods + similar patients); matrix uses MySQL patient/clinical context only.
+MATRIX_SKIP_RAG = os.getenv("MATRIX_SKIP_RAG", "0").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+MATRIX_SIMPLE_MODE = os.getenv("MATRIX_SIMPLE_MODE", "0").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+async def generateNutritionMatrixSimple(patientId: int) -> dict:
+    """
+    Simplified pipeline — no Chroma, no batching, no RAG.
+    Mirrors analyze-journal: one direct LLM call with patient + specialist context.
+    Use with MATRIX_SIMPLE_MODE=1 for testing.
+    """
+    logger.info(f"[SIMPLE] Fetching patient context for id={patientId}")
+    patient_ctx = await getPatientContext(patientId)
+
+    tdee = _calculate_tdee(patient_ctx)
+    logger.info(f"[SIMPLE] TDEE: {tdee['kcal']} kcal")
+
+    kcal      = tdee["kcal"]
+    protein_g = tdee["protein_g"]
+    carbs_g   = tdee["carbs_g"]
+    fat_g     = tdee["fat_g"]
+
+    prompt = f"""You are a clinical nutrition expert. Generate a 7-day, 4-meal-per-day diet plan.
+
+PATIENT CLINICAL CONTEXT:
+{patient_ctx}
+
+COMPUTED DAILY TARGETS:
+- Energy: {kcal} kcal/day
+- Protein: {protein_g}g | Carbs: {carbs_g}g | Fat: {fat_g}g
+
+RULES:
+1. Generate all 7 days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday.
+2. Each day has exactly 4 meals: Breakfast, Morning Snack, Lunch, Dinner.
+3. Each food entry must have: name, portion_g, kcal, protein_g, carbs_g, fat_g.
+4. Each day must include day_total_kcal (sum of meal kcal, within ±150 of {kcal}).
+5. Respect ALL allergies and restrictions in patient context.
+6. Do NOT write JavaScript comments (//) or ellipsis (...) placeholders.
+7. Write every single day and meal in full. No shortcuts.
+8. Output a single valid JSON object. No markdown. No text before or after.
+
+JSON structure:
+{{
+  "tdee": {{"kcal": {kcal}, "protein_g": {protein_g}, "carbs_g": {carbs_g}, "fat_g": {fat_g}}},
+  "matrix": {{
+    "Monday":    {{"Breakfast": {{"foods": [{{"name":"...","portion_g":0,"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0}}],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Tuesday":   {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Wednesday": {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Thursday":  {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Friday":    {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Saturday":  {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Sunday":    {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}}
+  }},
+  "clinical_notes": "Brief dietary strategy explanation.",
+  "foods_used": ["food name 1", "food name 2"]
+}}
+"""
+
+    llm = ChatOllama(
+        model=OLLAMA_MODEL,
+        temperature=0.0,
+        base_url=OLLAMA_HOST,
+        num_predict=int(os.getenv("OLLAMA_SIMPLE_NUM_PREDICT", "6000")),
+        num_ctx=int(os.getenv("OLLAMA_SIMPLE_NUM_CTX", "8000")),
+        format="json",
+    )
+
+    logger.info(f"[SIMPLE] Calling {OLLAMA_MODEL}...")
+    response = await llm.ainvoke(prompt)
+    raw = response.content if hasattr(response, "content") else str(response)
+
+    matrix_data = _repair_truncated_json(raw)
+
+    try:
+        validated = _validate_matrix_keys(matrix_data, tdee, patient_ctx)
+    except ValueError as exc:
+        logger.warning(f"[SIMPLE] Validation warning (returning anyway): {exc}")
+        # In simple/test mode, return what we have even if validation fails
+        return {
+            "patient_id":          patientId,
+            "tdee":                tdee,
+            "matrix":              matrix_data.get("matrix", {}),
+            "clinical_notes":      matrix_data.get("clinical_notes", ""),
+            "foods_used":          matrix_data.get("foods_used", []),
+            "raw_patient_context": patient_ctx,
+            "validation_warning":  str(exc),
+            "mode":                "simple_no_rag",
+        }
+
+    return {
+        "patient_id":          patientId,
+        "tdee":                tdee,
+        "matrix":              validated["matrix"],
+        "clinical_notes":      validated["clinical_notes"],
+        "foods_used":          validated["foods_used"],
+        "raw_patient_context": patient_ctx,
+        "mode":                "simple_no_rag",
+    }
+
+# Log full LLM prompts (batch JSON + clinical notes). If unset: on when MATRIX_SKIP_RAG, else off.
+_mlp = os.getenv("MATRIX_LOG_PROMPTS", "").strip()
+if _mlp:
+    MATRIX_LOG_PROMPTS = _mlp.lower() in ("1", "true", "yes", "on")
+else:
+    MATRIX_LOG_PROMPTS = MATRIX_SKIP_RAG
+MATRIX_LOG_PROMPTS_MAX_CHARS = int(os.getenv("MATRIX_LOG_PROMPTS_MAX_CHARS", "0"))
+
+
+def _log_matrix_prompt(label: str, prompt: str) -> None:
+    if not MATRIX_LOG_PROMPTS:
+        return
+    n = len(prompt)
+    cap = MATRIX_LOG_PROMPTS_MAX_CHARS
+    body = (
+        prompt
+        if cap <= 0 or n <= cap
+        else (prompt[:cap] + f"\n… [truncated, total {n} chars]")
+    )
+    logger.info("[matrix prompt] %s (%d chars)\n%s", label, n, body)
+
+
+_NUTRITION_CTX_RAG_DISABLED = """=== NUTRITIONAL DATABASE CONTEXT (RAG OFF — TEST MODE) ===
+No retrieved food list. Use clinical judgment, patient allergies/restrictions above, and TDEE targets.
+Choose common whole foods; prefix foods_used with external: when not from a fixed catalog.
+=== END OF NUTRITIONAL CONTEXT ==="""
+
+LLM_PATIENT_CTX_MAX = int(os.getenv("LLM_PATIENT_CTX_MAX", "2200"))
+LLM_NUTRITION_LINES_MAX = int(os.getenv("LLM_NUTRITION_LINES_MAX", "28"))
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -172,6 +312,25 @@ def _calculate_tdee(patient_context_str: str) -> dict:
     }
 
 
+def _compact_patient_context_for_llm(patient_ctx: str, max_chars: int) -> str:
+    """Drop decorative === banners; keep section labels and clinical facts (smaller prompts)."""
+    lines_out: list[str] = []
+    for line in patient_ctx.splitlines():
+        s = line.strip()
+        if not s or s.startswith("==="):
+            continue
+        lines_out.append(s)
+    text = "\n".join(lines_out)
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 40] + "\n… [patient context truncated]\n"
+
+
+def _compact_nutrition_context_for_llm(nutrition_ctx: str, max_lines: int) -> str:
+    lines = [ln for ln in nutrition_ctx.splitlines() if ln.strip()]
+    return "\n".join(lines[:max_lines])
+
+
 def _build_batch_prompt(
     days: list[str],
     patient_ctx: str,
@@ -184,12 +343,34 @@ def _build_batch_prompt(
     fat_g = tdee["fat_g"]
     days_csv = ", ".join(days)
 
+    patient_compact = _compact_patient_context_for_llm(patient_ctx, LLM_PATIENT_CTX_MAX)
+    nutrition_compact = _compact_nutrition_context_for_llm(
+        nutrition_ctx,
+        LLM_NUTRITION_LINES_MAX,
+    )
+
+    rule1 = (
+        "1. PRIORITIZE foods listed in NUTRITIONAL DATABASE CONTEXT above."
+        if not MATRIX_SKIP_RAG
+        else "1. Choose whole foods appropriate to the patient's condition, allergies, and restrictions (no fixed food list in this run)."
+    )
+
     return f"""You are a clinical nutrition expert. Build a partial weekly diet matrix.
 
-{patient_ctx}
-{nutrition_ctx}
+{patient_compact}
+
+{nutrition_compact}
+
+COMPUTED DAILY TARGETS (from Python — design each day to approximate these totals):
+- Energy (TDEE): {kcal} kcal/day (acceptable band ±{int(round(KCAL_TOLERANCE))} kcal: {max(0, int(kcal - KCAL_TOLERANCE))}–{int(kcal + KCAL_TOLERANCE)})
+- Protein: ~{protein_g} g/day | Carbs: ~{carbs_g} g/day | Fat: ~{fat_g} g/day
+Distribute protein, carbs, and fat across the four meals in a balanced way; sum meal kcals to the TDEE band.
 
 DAILY TARGETS: {kcal} kcal | Protein: {protein_g}g | Carbs: {carbs_g}g | Fat: {fat_g}g
+
+HARD CONSTRAINT — CALORIES: TDEE for this patient is {kcal} kcal/day (tolerance ±{int(round(KCAL_TOLERANCE))}).
+For EACH day you output, sum of all meal kcal MUST land in [{max(0, int(kcal - KCAL_TOLERANCE))}, {int(kcal + KCAL_TOLERANCE)}].
+Set day_total_kcal to the sum of the four meals; do not invent a lower daily total.
 
 Generate ONLY the following days: {days_csv}. No other days.
 Do NOT write JavaScript comments (//) anywhere in the output.
@@ -198,7 +379,7 @@ Write every single meal in full. No shortcuts.
 Output must be a single valid JSON object with no text before or after.
 
 CRITICAL RULES:
-1. PRIORITIZE foods from NUTRITIONAL DATABASE CONTEXT above.
+{rule1}
 2. Respect ALL allergies and restrictions in patient context.
 3. Each listed day MUST have exactly 4 meals: Breakfast, Morning Snack, Lunch, Dinner.
 4. Each meal MUST list foods with fields: name, portion_g, kcal, protein_g, carbs_g, fat_g.
@@ -372,6 +553,7 @@ Plain text only — no JSON, no markdown fences, no bullet list required.
 
 {patient_ctx}{extra}
 """
+    _log_matrix_prompt("clinical_notes", prompt)
     llm = _make_notes_llm()
     t0 = time.perf_counter()
     response = await llm.ainvoke(prompt)
@@ -391,8 +573,9 @@ async def _generate_day_batch(
     tdee: dict,
 ) -> dict:
     prompt = _build_batch_prompt(days, patient_ctx, nutrition_ctx, tdee)
-    llm = _make_batch_llm()
     label = ", ".join(days)
+    _log_matrix_prompt(f"meal_batch_{label.replace(', ', '_')}", prompt)
+    llm = _make_batch_llm()
     logger.info(
         f"[RAG] Batch LLM ({label}): model={OLLAMA_MODEL} temp=0 num_predict="
         f"{OLLAMA_BATCH_NUM_PREDICT} num_ctx={OLLAMA_BATCH_NUM_CTX} format=json",
@@ -474,6 +657,65 @@ def _normalize_food_item(f) -> dict:
         "carbs_g": float(f.get("carbs_g", 0) or 0),
         "fat_g": float(f.get("fat_g", 0) or 0),
     }
+
+
+def _snap_matrix_to_tdee(matrix: dict, target_kcal: float, tol: float) -> None:
+    """
+    Scale each day's foods so daily kcal matches TDEE (smaller LLMs often undershoot).
+    Preserves macro ratios and portion scaling per food item.
+    """
+    t = float(target_kcal)
+    tol_f = float(tol)
+    for day in DAYS:
+        day_o = matrix[day]
+        total_from_foods = 0.0
+        for meal in MEALS:
+            blk = day_o[meal]
+            for f in blk.get("foods") or []:
+                fi = _normalize_food_item(f)
+                total_from_foods += float(fi.get("kcal", 0) or 0)
+        if total_from_foods <= 1e-6:
+            total_from_foods = sum(
+                float(day_o[m].get("meal_kcal", 0) or 0)
+                for m in MEALS
+                if isinstance(day_o.get(m), dict)
+            )
+        if total_from_foods <= 1e-6:
+            logger.warning(
+                "[matrix] %s: cannot snap to TDEE — no non-zero kcal in foods",
+                day,
+            )
+            continue
+        dt = float(day_o.get("day_total_kcal", total_from_foods))
+        if abs(dt - t) <= tol_f:
+            continue
+        factor = t / total_from_foods
+        logger.info(
+            "[matrix] TDEE snap %s: %.0f kcal → target %.0f (scale %.4f)",
+            day,
+            dt,
+            t,
+            factor,
+        )
+        for meal in MEALS:
+            blk = day_o[meal]
+            foods = blk.get("foods") or []
+            for f in foods:
+                fi = _normalize_food_item(f)
+                f["kcal"] = round(float(fi.get("kcal", 0) or 0) * factor, 2)
+                f["protein_g"] = round(float(fi.get("protein_g", 0) or 0) * factor, 2)
+                f["carbs_g"] = round(float(fi.get("carbs_g", 0) or 0) * factor, 2)
+                f["fat_g"] = round(float(fi.get("fat_g", 0) or 0) * factor, 2)
+                f["portion_g"] = round(float(fi.get("portion_g", 0) or 0) * factor, 2)
+            mk = sum(
+                float(_normalize_food_item(x).get("kcal", 0) or 0)
+                for x in blk.get("foods") or []
+            )
+            blk["meal_kcal"] = round(mk, 1)
+        day_o["day_total_kcal"] = round(
+            sum(float(day_o[m]["meal_kcal"]) for m in MEALS),
+            1,
+        )
 
 
 def _normalize_matrix_in_place(matrix: dict) -> dict:
@@ -619,6 +861,9 @@ def _validate_matrix_keys(
                 raise ValueError(f"Missing meal '{meal}' for '{day}'.")
 
     matrix = _normalize_matrix_in_place(matrix)
+    if MATRIX_AUTO_SCALE_TDEE:
+        _snap_matrix_to_tdee(matrix, float(python_tdee["kcal"]), KCAL_TOLERANCE)
+        matrix = _normalize_matrix_in_place(matrix)
     _validate_day_kcal_tolerance(matrix, python_tdee["kcal"], KCAL_TOLERANCE)
     _validate_no_consecutive_duplicate_days(matrix)
     _validate_allergens_and_restrictions(patient_ctx, matrix)
@@ -650,28 +895,38 @@ async def generateNutritionMatrix(patientId: int) -> dict:
     disease_str = disease_match.group(1).strip() if disease_match else "general health"
 
     rag_query, boost_tags = _build_rag_query(patient_ctx, disease_str)
-    logger.info(
-        f"[RAG] Step 2: Chroma db_nutritie query={rag_query!r} tags={boost_tags}",
-    )
 
-    nutrition_ctx = await timed_coro(
-        "matrix_chroma_nutrition_context",
-        getNutritionalContext(
-            rag_query,
-            top_k=RAG_NUTRITION_TOP_K,
-            disease_filter_tags=boost_tags,
-        ),
-    )
-
-    logger.info(f"[RAG] Step 3: similar historical patients for '{disease_str}'")
-    similar_ctx = await timed_coro(
-        "matrix_chroma_similar_patients",
-        getSimilarPatientsContext(patient_ctx),
-    )
-    if similar_ctx:
-        logger.info("[RAG] Similar patient context loaded.")
+    if MATRIX_SKIP_RAG:
+        logger.warning(
+            "[matrix] MATRIX_SKIP_RAG=1 — skipping Chroma (nutrition + similar patients); "
+            "using MySQL patient/clinical context only.",
+        )
+        nutrition_ctx = _NUTRITION_CTX_RAG_DISABLED
+        similar_ctx = ""
     else:
-        logger.info("[RAG] No similar patient context available (db_pacienti may be empty).")
+        logger.info(
+            f"[RAG] Step 2: Chroma db_nutritie query={rag_query!r} tags={boost_tags}",
+        )
+        nutrition_ctx = await timed_coro(
+            "matrix_chroma_nutrition_context",
+            getNutritionalContext(
+                rag_query,
+                top_k=RAG_NUTRITION_TOP_K,
+                disease_filter_tags=boost_tags,
+            ),
+        )
+
+        logger.info(f"[RAG] Step 3: similar historical patients for '{disease_str}'")
+        similar_ctx = await timed_coro(
+            "matrix_chroma_similar_patients",
+            getSimilarPatientsContext(patient_ctx),
+        )
+        if similar_ctx:
+            logger.info("[RAG] Similar patient context loaded.")
+        else:
+            logger.info(
+                "[RAG] No similar patient context available (db_pacienti may be empty).",
+            )
 
     tdee = _calculate_tdee(patient_ctx)
     logger.info(
@@ -728,9 +983,21 @@ async def generateNutritionMatrix(patientId: int) -> dict:
     }
 
 
+# def generate_nutrition_matrix_sync(patient_id: int) -> dict:
+#     loop = asyncio.new_event_loop()
+#     try:
+#         return loop.run_until_complete(generateNutritionMatrix(patient_id))
+#     finally:
+#         loop.close()
+
 def generate_nutrition_matrix_sync(patient_id: int) -> dict:
     loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(generateNutritionMatrix(patient_id))
+        coro = (
+            generateNutritionMatrixSimple(patient_id)
+            if MATRIX_SIMPLE_MODE
+            else generateNutritionMatrix(patient_id)
+        )
+        return loop.run_until_complete(coro)
     finally:
         loop.close()

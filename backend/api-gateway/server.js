@@ -110,7 +110,23 @@ function createFetchProxy({ prefix, targetBaseUrl }) {
 
       res.status(resp.status);
       const outHeaders = filterResponseHeaders(resp.headers);
-      for (const [k, v] of Object.entries(outHeaders)) res.setHeader(k, v);
+      const noStorePoll =
+        typeof downstreamPath === "string" &&
+        downstreamPath.includes("matrix-status");
+      for (const [k, v] of Object.entries(outHeaders)) {
+        if (noStorePoll) {
+          const lk = k.toLowerCase();
+          if (lk === "etag" || lk === "last-modified") continue;
+        }
+        res.setHeader(k, v);
+      }
+      if (noStorePoll) {
+        res.setHeader(
+          "Cache-Control",
+          "no-store, no-cache, must-revalidate, private",
+        );
+        res.setHeader("Pragma", "no-cache");
+      }
       res.send(buf);
     } catch (err) {
       console.error("Gateway proxy error:", err);

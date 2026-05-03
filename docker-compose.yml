@@ -105,6 +105,8 @@ services:
       medical-service:
         condition: service_started
 
+  # Optional GPU (NVIDIA): add deploy.resources.reservations.devices + nvidia runtime
+  # to cut inference time sharply; CPU-only is fine for development.
   ollama:
     image: ollama/ollama:latest
     volumes:
@@ -115,16 +117,43 @@ services:
       timeout: 5s
       retries: 20
 
+  # Best-effort model pull (does NOT block other services — run manual pull if this fails).
+  ollama-init:
+    image: ollama/ollama:latest
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    # Wait for daemon inside `ollama` to listen, then pull. Exit 0 even if pull fails so `compose up` succeeds.
+    command:
+      [
+        "sh",
+        "-c",
+        'sleep 15 && (ollama pull llama3.2:3b || echo "ollama-init: pull failed — run: docker compose exec ollama ollama pull llama3.2:3b")',
+      ]
+
   ai-service:
     build:
       context: ./ai-service
     environment:
       PORT: 5001
       OLLAMA_HOST: ${OLLAMA_HOST:-http://ollama:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
       OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-8192}
       OLLAMA_REPAIR_NUM_PREDICT: ${OLLAMA_REPAIR_NUM_PREDICT:-8192}
+      OLLAMA_BATCH_NUM_PREDICT: ${OLLAMA_BATCH_NUM_PREDICT:-1800}
+      OLLAMA_BATCH_NUM_CTX: ${OLLAMA_BATCH_NUM_CTX:-6000}
+      OLLAMA_NOTES_NUM_PREDICT: ${OLLAMA_NOTES_NUM_PREDICT:-256}
+      LLM_PATIENT_CTX_MAX: ${LLM_PATIENT_CTX_MAX:-2200}
+      LLM_NUTRITION_LINES_MAX: ${LLM_NUTRITION_LINES_MAX:-28}
       RAG_NUTRITION_TOP_K: ${RAG_NUTRITION_TOP_K:-6}
+      # 1 = no Chroma/embeddings in ai-service; matrix uses MySQL patient context only; log prompts by default.
+      MATRIX_SKIP_RAG: "1"
+      MATRIX_SIMPLE_MODE: "1"
+      MATRIX_LOG_PROMPTS: ${MATRIX_LOG_PROMPTS:-}
+      MATRIX_LOG_PROMPTS_MAX_CHARS: ${MATRIX_LOG_PROMPTS_MAX_CHARS:-0}
       RAG_CONTEXT_MAX_CHARS: ${RAG_CONTEXT_MAX_CHARS:-12000}
       RAG_MIN_DOCS: ${RAG_MIN_DOCS:-3}
       RAG_SIMILAR_TOP_K: ${RAG_SIMILAR_TOP_K:-3}
@@ -132,7 +161,7 @@ services:
       RAG_USE_METADATA_FILTER: ${RAG_USE_METADATA_FILTER:-1}
       RAG_EMBED_CACHE: ${RAG_EMBED_CACHE:-1}
       RAG_EMBED_CACHE_SIZE: ${RAG_EMBED_CACHE_SIZE:-4096}
-      RAG_RESPONSE_CACHE: ${RAG_RESPONSE_CACHE:-0}
+      RAG_RESPONSE_CACHE: ${RAG_RESPONSE_CACHE:-1}
       RAG_RESPONSE_CACHE_SIZE: ${RAG_RESPONSE_CACHE_SIZE:-512}
       ANONYMIZED_TELEMETRY: "False"
       MATRIX_KCAL_TOLERANCE: ${MATRIX_KCAL_TOLERANCE:-150}

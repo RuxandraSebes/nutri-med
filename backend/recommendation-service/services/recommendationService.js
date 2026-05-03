@@ -127,8 +127,8 @@ function ragMatrixToPlanShape(ragResult, patient) {
     llm_outputs: {
       clinical_logic: clinical_notes || "",
       culinary_creative:
-        "Meal plan generated using RAG with nutritional database context.",
-      rag_retrieval: `Foods used from nutritional database: ${(foods_used || []).slice(0, 10).join(", ")}${foods_used?.length > 10 ? "…" : ""}`,
+        "Structured 7×4 meal matrix from patient/specialist context and Python-computed TDEE and macros.",
+      rag_retrieval: `Foods in plan: ${(foods_used || []).slice(0, 12).join(", ")}${(foods_used || []).length > 12 ? "…" : ""}`,
     },
     target_macros: tdee || null,
   };

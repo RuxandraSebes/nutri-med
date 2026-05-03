@@ -6,11 +6,20 @@ import { baseFetch } from "./baseFetch.js";
 export async function pollUntilMatrixDone(jobId, options = {}) {
   const intervalMs = options.intervalMs ?? 8000;
   const timeoutMs = options.timeoutMs ?? 1200000;
+  const onTick = options.onTick;
+  const onPoll = options.onPoll;
   const path = `/api/ai/matrix-status/${encodeURIComponent(jobId)}`;
   const deadline = Date.now() + timeoutMs;
+  const pollStart = Date.now();
 
   while (Date.now() < deadline) {
-    const data = await baseFetch(path);
+    if (onTick) {
+      onTick(Math.floor((Date.now() - pollStart) / 1000));
+    }
+    const data = await baseFetch(path, { cache: "no-store" });
+    if (onPoll) {
+      onPoll(data);
+    }
     if (data.status === "done") return data;
     if (data.status === "error") {
       const err = new Error(data.error || "Matrix generation failed");

@@ -2,9 +2,9 @@
 server.py — Flask AI service
 Endpoints:
   GET  /health                 → service + DB status
-  POST /ask                    → RAG question against db_nutritie or db_pacienti
-  POST /analyze-journal        → food journal nutritional audit
-  POST /generate-matrix        → async job: 7×4 RAG Nutrition Matrix (202 + jobId)
+  POST /ask                    → RAG question against db_nutritie or db_pacienti (503 if MATRIX_SKIP_RAG=1)
+  POST /analyze-journal        → food journal nutritional audit (LLM only; no Chroma)
+  POST /generate-matrix        → async job: 7×4 nutrition matrix (202 + jobId); no Chroma if MATRIX_SKIP_RAG=1
   GET  /matrix-status/<job_id> → poll job result
 """
 
@@ -29,39 +29,60 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Must match nutrition_matrix.MATRIX_SKIP_RAG — when on, no Chroma retrieval anywhere.
+MATRIX_SKIP_RAG = os.getenv("MATRIX_SKIP_RAG", "0").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+
 app = Flask(__name__)
 
 # ── Job store (async matrix generation) ────────────────────────────────────────
 JOBS: dict = {}
 
-# ── Embeddings (shared singleton with RAG matrix pipeline) ───────────────────
-embeddings = _get_embeddings()
+# ── Embeddings + vector DBs (skipped entirely when MATRIX_SKIP_RAG=1) ─────────
+embeddings = None
+db_nutritie = None
+db_pacienti = None
 
-# ── Vector DBs ────────────────────────────────────────────────────────────────
-if os.path.exists("./db_nutritie"):
-    db_nutritie = Chroma(
-        persist_directory="./db_nutritie",
-        embedding_function=embeddings,
+if MATRIX_SKIP_RAG:
+    logger.info(
+        "MATRIX_SKIP_RAG=1 — Chroma and embedding model are not loaded; "
+        "/ask returns 503; /generate-matrix uses patient MySQL context only.",
     )
-    logger.info("✅ db_nutritie loaded.")
 else:
-    db_nutritie = None
-    logger.warning("⚠️  db_nutritie not found — run ingestion.py first.")
+    embeddings = _get_embeddings()
 
-if os.path.exists("./db_pacienti"):
-    db_pacienti = Chroma(
-        persist_directory="./db_pacienti",
-        embedding_function=embeddings,
-        collection_name="patient_history",
-    )
-    logger.info("✅ db_pacienti loaded.")
-else:
-    db_pacienti = None
-    logger.warning("⚠️  db_pacienti not found — run ingestion_patients.py first.")
+    if os.path.exists("./db_nutritie"):
+        db_nutritie = Chroma(
+            persist_directory="./db_nutritie",
+            embedding_function=embeddings,
+        )
+        logger.info("✅ db_nutritie loaded.")
+    else:
+        logger.warning("⚠️  db_nutritie not found — run ingestion.py first.")
+
+    if os.path.exists("./db_pacienti"):
+        db_pacienti = Chroma(
+            persist_directory="./db_pacienti",
+            embedding_function=embeddings,
+            collection_name="patient_history",
+        )
+        logger.info("✅ db_pacienti loaded.")
+    else:
+        logger.warning("⚠️  db_pacienti not found — run ingestion_patients.py first.")
+
+    try:
+        embeddings.embed_query("nutrition warm-up")
+        logger.info("✅ Embedding model warmed up (embed_query).")
+    except Exception as exc:
+        logger.warning("⚠️  Embedding warm-up failed: %s", exc)
 
 # ── LLM ───────────────────────────────────────────────────────────────────────
 llm = ChatOllama(
-    model=os.getenv("OLLAMA_MODEL", "mistral"),
+    model=os.getenv("OLLAMA_MODEL", "llama3.2:3b"),
     temperature=0.2,
     base_url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
 )
@@ -111,8 +132,10 @@ def health():
     return jsonify(
         {
             "status": "ok",
+            "matrix_skip_rag": MATRIX_SKIP_RAG,
             "db_nutritie": db_nutritie is not None,
             "db_pacienti": db_pacienti is not None,
+            "rag_ask_available": not MATRIX_SKIP_RAG and db_nutritie is not None,
         }
     )
 
@@ -125,6 +148,17 @@ def ask_ai():
 
     if not user_query:
         return jsonify({"error": "Missing 'query'"}), 400
+
+    if MATRIX_SKIP_RAG:
+        return (
+            jsonify(
+                {
+                    "error": "RAG is disabled (MATRIX_SKIP_RAG=1). "
+                    "/ask uses Chroma retrieval and is unavailable.",
+                }
+            ),
+            503,
+        )
 
     db = db_nutritie if target_db == "nutritie" else db_pacienti
     if db is None:
@@ -242,7 +276,7 @@ def generate_matrix():
     except (TypeError, ValueError):
         return jsonify({"error": "'patientId' must be an integer"}), 400
 
-    if db_nutritie is None:
+    if not MATRIX_SKIP_RAG and db_nutritie is None:
         return (
             jsonify(
                 {
@@ -272,10 +306,18 @@ def generate_matrix():
     return jsonify({"jobId": job_id, "status": "pending"}), 202
 
 
+def _no_store_json(payload, status=200):
+    r = jsonify(payload)
+    r.status_code = status
+    r.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    r.headers["Pragma"] = "no-cache"
+    return r
+
+
 @app.route("/matrix-status/<job_id>", methods=["GET"])
 def matrix_status(job_id: str):
     if job_id not in JOBS:
-        return jsonify({"error": "Unknown job_id"}), 404
+        return _no_store_json({"error": "Unknown job_id"}, 404)
 
     job = JOBS[job_id]
     st = job["status"]
@@ -287,7 +329,7 @@ def matrix_status(job_id: str):
         out["result"] = job.get("result")
     if st == "error":
         out["error"] = job.get("error") or "Unknown error"
-    return jsonify(out)
+    return _no_store_json(out)
 
 
 if __name__ == "__main__":

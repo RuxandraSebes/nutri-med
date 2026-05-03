@@ -55,6 +55,13 @@ RAG_RESPONSE_CACHE_SIZE = int(os.getenv("RAG_RESPONSE_CACHE_SIZE", "512"))
 RAG_SIMILAR_TOP_K = int(os.getenv("RAG_SIMILAR_TOP_K", "3"))
 RAG_SIMILAR_CTX_STRING_CAP = int(os.getenv("RAG_SIMILAR_CTX_STRING_CAP", "6000"))
 
+MATRIX_SKIP_RAG = os.getenv("MATRIX_SKIP_RAG", "0").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+
 # ── Singletons ────────────────────────────────────────────────────────────────
 _embeddings = None
 _db_nutritie = None
@@ -485,6 +492,12 @@ async def getNutritionalContext(
     Query ChromaDB (db_nutritie) for the TOP-K most relevant foods.
     If disease_filter_tags is provided, boost matching documents to the top.
     """
+    if MATRIX_SKIP_RAG:
+        raise RuntimeError(
+            "MATRIX_SKIP_RAG=1: nutrition Chroma retrieval is disabled; "
+            "do not call getNutritionalContext.",
+        )
+
     tk = top_k if top_k is not None else DEFAULT_RAG_NUTRITION_TOP_K
     tk = max(1, tk)
 
@@ -505,6 +518,10 @@ async def getSimilarPatientsContext(patient_ctx: str, top_k: int | None = None) 
     Returns their previously successful meal plans as few-shot examples for the LLM.
     Non-fatal: returns empty string if db_pacienti is unavailable.
     """
+    if MATRIX_SKIP_RAG:
+        logger.info("[rag] getSimilarPatientsContext skipped (MATRIX_SKIP_RAG=1)")
+        return ""
+
     k = top_k if top_k is not None else RAG_SIMILAR_TOP_K
     k = max(1, k)
 
