@@ -1,7 +1,6 @@
 import { useState } from "react";
 import Button from "./UI/Button.jsx";
 import { StatusBadge } from "./UI/Badge.jsx";
-import { Button as ShadButton } from "@/components/shadcn/button.jsx";
 import { inputClass, labelClass } from "./specialistStyles.js";
 
 const DAYS = [
@@ -14,39 +13,129 @@ const DAYS = [
   "Sunday",
 ];
 const MEALS = ["Breakfast", "Morning Snack", "Lunch", "Dinner"];
-
 const MEAL_TIME = {
   Breakfast: "08:00",
   "Morning Snack": "10:30",
   Lunch: "13:00",
   Dinner: "19:00",
 };
+const MEAL_COLOR = {
+  Breakfast: { bg: "#eef2ff", color: "#6366f1", border: "#c7d2fe" },
+  "Morning Snack": { bg: "#f0f9ff", color: "#0ea5e9", border: "#bae6fd" },
+  Lunch: { bg: "#f0fdf4", color: "#16a34a", border: "#bbf7d0" },
+  Dinner: { bg: "#fffbeb", color: "#d97706", border: "#fde68a" },
+};
 
-function MacroBadges({ p, c, f, kcal }) {
+/* ── helpers ─────────────────────────────────────────────────────────────────── */
+function parseNum(raw) {
+  if (raw === "" || raw == null) return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function ShadBtn({
+  children,
+  variant = "secondary",
+  size = "sm",
+  disabled,
+  onClick,
+  className = "",
+}) {
+  const styles = {
+    secondary: {
+      background: "#f1f5f9",
+      color: "#0f172a",
+      border: "1.5px solid #e2e8f0",
+    },
+    outline: {
+      background: "transparent",
+      color: "#0f172a",
+      border: "1.5px solid #e2e8f0",
+    },
+    destructive: {
+      background: "#fef2f2",
+      color: "#dc2626",
+      border: "1.5px solid #fecaca",
+    },
+    primary: {
+      background: "#6366f1",
+      color: "#fff",
+      border: "1.5px solid #6366f1",
+    },
+  };
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1">
-      <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums bg-blue-100 text-blue-700">
-        P {p != null && p !== "" ? Number(p).toFixed(1) : "—"}g
-      </span>
-      <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums bg-amber-100 text-amber-700">
-        C {c != null && c !== "" ? Number(c).toFixed(1) : "—"}g
-      </span>
-      <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums bg-red-100 text-red-700">
-        F {f != null && f !== "" ? Number(f).toFixed(1) : "—"}g
-      </span>
-      <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums bg-emerald-100 text-emerald-700">
-        {kcal != null && kcal !== "" ? Number(kcal).toFixed(0) : "—"} kcal
-      </span>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={className}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: size === "sm" ? "6px 12px" : "9px 16px",
+        borderRadius: 8,
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        transition: "all .15s",
+        opacity: disabled ? 0.5 : 1,
+        ...(styles[variant] || styles.secondary),
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/* ── macro badges row ─────────────────────────────────────────────────────────── */
+function MacroBadges({ p, c, f, kcal }) {
+  const fmt = (v) => (v != null && v !== "" ? Number(v).toFixed(1) : "—");
+  const fmtKcal = (v) => (v != null && v !== "" ? Number(v).toFixed(0) : "—");
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+      {[
+        { label: "P", val: `${fmt(p)}g`, bg: "#eff6ff", color: "#1d4ed8" },
+        { label: "C", val: `${fmt(c)}g`, bg: "#fffbeb", color: "#b45309" },
+        { label: "F", val: `${fmt(f)}g`, bg: "#fef2f2", color: "#dc2626" },
+        { label: "kcal", val: fmtKcal(kcal), bg: "#f0fdf4", color: "#15803d" },
+      ].map(({ label, val, bg, color }) => (
+        <span
+          key={label}
+          style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            padding: "2px 7px",
+            borderRadius: 5,
+            background: bg,
+            color,
+          }}
+        >
+          {label !== "kcal" ? `${label} ` : ""}
+          {val}
+          {label === "kcal" ? " kcal" : ""}
+        </span>
+      ))}
     </div>
   );
 }
 
+/* ── food row (editable) ──────────────────────────────────────────────────────── */
 function FoodRow({ day, meal, index, food, onPatchFood }) {
   return (
-    <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
-      <div className="grid gap-2 sm:grid-cols-2">
-        <label className="block sm:col-span-2">
-          <span className={labelClass}>Food name</span>
+    <div
+      style={{
+        background: "#fff",
+        border: "1.5px solid #e2e8f0",
+        borderRadius: 10,
+        padding: "12px 14px",
+        boxShadow: "0 1px 2px rgba(0,0,0,.04)",
+      }}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div style={{ gridColumn: "1/-1" }}>
+          <label className={labelClass}>Food name</label>
           <input
             className={inputClass}
             value={food.name ?? ""}
@@ -54,9 +143,9 @@ function FoodRow({ day, meal, index, food, onPatchFood }) {
               onPatchFood(day, meal, index, "name", e.target.value)
             }
           />
-        </label>
-        <label className="block">
-          <span className={labelClass}>Portion (g)</span>
+        </div>
+        <div>
+          <label className={labelClass}>Portion (g)</label>
           <input
             className={inputClass}
             inputMode="decimal"
@@ -65,9 +154,9 @@ function FoodRow({ day, meal, index, food, onPatchFood }) {
               onPatchFood(day, meal, index, "portion_g", e.target.value)
             }
           />
-        </label>
-        <label className="block">
-          <span className={labelClass}>Clinical / prep note</span>
+        </div>
+        <div>
+          <label className={labelClass}>Note</label>
           <input
             className={inputClass}
             value={food.notes ?? food.note ?? ""}
@@ -75,53 +164,34 @@ function FoodRow({ day, meal, index, food, onPatchFood }) {
               onPatchFood(day, meal, index, "notes", e.target.value)
             }
           />
-        </label>
+        </div>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <label className="block">
-          <span className={labelClass}>Protein (g)</span>
-          <input
-            className={inputClass}
-            inputMode="decimal"
-            value={food.protein_g ?? ""}
-            onChange={(e) =>
-              onPatchFood(day, meal, index, "protein_g", e.target.value)
-            }
-          />
-        </label>
-        <label className="block">
-          <span className={labelClass}>Carbs (g)</span>
-          <input
-            className={inputClass}
-            inputMode="decimal"
-            value={food.carbs_g ?? ""}
-            onChange={(e) =>
-              onPatchFood(day, meal, index, "carbs_g", e.target.value)
-            }
-          />
-        </label>
-        <label className="block">
-          <span className={labelClass}>Fat (g)</span>
-          <input
-            className={inputClass}
-            inputMode="decimal"
-            value={food.fat_g ?? ""}
-            onChange={(e) =>
-              onPatchFood(day, meal, index, "fat_g", e.target.value)
-            }
-          />
-        </label>
-        <label className="block">
-          <span className={labelClass}>Energy (kcal)</span>
-          <input
-            className={inputClass}
-            inputMode="decimal"
-            value={food.kcal ?? ""}
-            onChange={(e) =>
-              onPatchFood(day, meal, index, "kcal", e.target.value)
-            }
-          />
-        </label>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4,1fr)",
+          gap: 8,
+          marginTop: 8,
+        }}
+      >
+        {[
+          { key: "protein_g", label: "Protein (g)" },
+          { key: "carbs_g", label: "Carbs (g)" },
+          { key: "fat_g", label: "Fat (g)" },
+          { key: "kcal", label: "Kcal" },
+        ].map(({ key, label }) => (
+          <div key={key}>
+            <label className={labelClass}>{label}</label>
+            <input
+              className={inputClass}
+              inputMode="decimal"
+              value={food[key] ?? ""}
+              onChange={(e) =>
+                onPatchFood(day, meal, index, key, e.target.value)
+              }
+            />
+          </div>
+        ))}
       </div>
       <MacroBadges
         p={food.protein_g}
@@ -133,9 +203,7 @@ function FoodRow({ day, meal, index, food, onPatchFood }) {
   );
 }
 
-/**
- * Tab 3: editable weekly meal matrix, clinical strategy, sticky workflow actions.
- */
+/* ═══════════════════════════════════════════════════════════════════════════ */
 export default function MealMatrix({
   dashboardData,
   setDashboardData,
@@ -151,9 +219,9 @@ export default function MealMatrix({
   discardDraft,
 }) {
   const [actionBusy, setActionBusy] = useState(null);
+
   const plan = dashboardData.plan;
   const decision = dashboardData.decision;
-
   const inner = plan?.plan;
   const mm = inner?.meal_matrix;
   const weekly = mm?.weekly;
@@ -166,12 +234,6 @@ export default function MealMatrix({
     });
   }
 
-  function parseNum(raw) {
-    if (raw === "" || raw == null) return 0;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : 0;
-  }
-
   function onPatchFood(day, meal, foodIndex, field, raw) {
     patchPlan((p) => {
       if (!p?.plan?.meal_matrix?.weekly?.[day]?.[meal]) return p;
@@ -179,7 +241,7 @@ export default function MealMatrix({
       const dayObj = { ...weeklyPrev[day] };
       const mealObj = { ...dayObj[meal] };
       const foods = [...(mealObj.foods || [])];
-      const prevFood = foods[foodIndex] || {};
+      const prev = foods[foodIndex] || {};
       let nextVal = raw;
       if (
         ["portion_g", "kcal", "protein_g", "carbs_g", "fat_g"].includes(field)
@@ -189,29 +251,23 @@ export default function MealMatrix({
             ? 0
             : Number.isFinite(Number(raw))
               ? Math.round(Number(raw) * 100) / 100
-              : prevFood[field];
+              : prev[field];
       }
-      foods[foodIndex] = { ...prevFood, [field]: nextVal };
+      foods[foodIndex] = { ...prev, [field]: nextVal };
       mealObj.foods = foods;
-      const mealKcal = foods.reduce(
-        (s, f) => s + parseNum(f.kcal),
-        0,
-      );
-      mealObj.meal_kcal = Math.round(mealKcal * 10) / 10;
+      mealObj.meal_kcal =
+        Math.round(foods.reduce((s, f) => s + parseNum(f.kcal), 0) * 10) / 10;
       dayObj[meal] = mealObj;
       let dayTotal = 0;
-      for (const m of MEALS) {
-        dayTotal += parseNum(dayObj[m]?.meal_kcal);
-      }
+      for (const m of MEALS) dayTotal += parseNum(dayObj[m]?.meal_kcal);
       dayObj.day_total_kcal = Math.round(dayTotal * 10) / 10;
-      const nextWeekly = { ...weeklyPrev, [day]: dayObj };
       return {
         ...p,
         plan: {
           ...p.plan,
           meal_matrix: {
             ...p.plan.meal_matrix,
-            weekly: nextWeekly,
+            weekly: { ...weeklyPrev, [day]: dayObj },
           },
         },
       };
@@ -222,9 +278,10 @@ export default function MealMatrix({
     patchPlan((p) => {
       if (!p?.plan?.meal_matrix?.weekly?.[day]?.[meal]) return p;
       const weeklyPrev = p.plan.meal_matrix.weekly;
-      const dayObj = { ...weeklyPrev[day] };
-      const mealObj = { ...dayObj[meal], [field]: raw };
-      dayObj[meal] = mealObj;
+      const dayObj = {
+        ...weeklyPrev[day],
+        [meal]: { ...weeklyPrev[day][meal], [field]: raw },
+      };
       return {
         ...p,
         plan: {
@@ -242,15 +299,8 @@ export default function MealMatrix({
     patchPlan((p) => {
       const matrix = p.plan.meal_matrix;
       const meals = [...(matrix.meals || [])];
-      const row = { ...meals[i], [field]: raw };
-      meals[i] = row;
-      return {
-        ...p,
-        plan: {
-          ...p.plan,
-          meal_matrix: { ...matrix, meals },
-        },
-      };
+      meals[i] = { ...meals[i], [field]: raw };
+      return { ...p, plan: { ...p.plan, meal_matrix: { ...matrix, meals } } };
     });
   }
 
@@ -269,19 +319,58 @@ export default function MealMatrix({
       return;
     }
     setActionBusy(action);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 200));
     onDecision(action);
     setActionBusy(null);
   }
 
   if (!plan) {
     return (
-      <div className="mx-auto max-w-6xl rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
-        <p className="text-sm text-slate-600">
-          No draft plan yet. Use{" "}
-          <strong className="text-slate-900">Workspace</strong> to submit
-          clinical data and generate a meal matrix.
-        </p>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 12,
+          padding: "60px 24px",
+          background: "#fff",
+          border: "1.5px dashed #e2e8f0",
+          borderRadius: 16,
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 16,
+            background: "#f1f5f9",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <svg
+            width="26"
+            height="26"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#94a3b8"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+          </svg>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
+          No draft plan yet
+        </div>
+        <div style={{ fontSize: 13.5, color: "#94a3b8" }}>
+          Use the <strong style={{ color: "#0f172a" }}>Workspace</strong> tab to
+          submit clinical data and generate a meal matrix.
+        </div>
       </div>
     );
   }
@@ -296,28 +385,74 @@ export default function MealMatrix({
           : "pending";
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 pb-24">
-      {/* Sticky workflow bar */}
-      <div className="sticky top-0 z-30 -mx-4 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur md:mx-0 md:rounded-xl md:border md:border-slate-200">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold text-slate-900">
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+        paddingBottom: 24,
+      }}
+    >
+      {/* ── Sticky workflow bar ── */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 30,
+          background: "rgba(255,255,255,.95)",
+          backdropFilter: "blur(8px)",
+          border: "1.5px solid #e2e8f0",
+          borderRadius: 16,
+          boxShadow: "0 4px 16px rgba(0,0,0,.08)",
+          overflow: "hidden",
+        }}
+      >
+        {/* top row: plan info + approve/reject */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+            padding: "14px 20px",
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
               Plan #{plan.plan_id ?? plan.id} — specialist review
             </div>
-            <div className="truncate text-xs text-slate-500">
-              {patientLabel} (record #{selectedRecordId}) ·{" "}
-              {(inner?.clinical_strategy || "").slice(0, 120)}
-              {(inner?.clinical_strategy || "").length > 120 ? "…" : ""}
+            <div
+              style={{
+                fontSize: 12,
+                color: "#64748b",
+                marginTop: 2,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {patientLabel} (record #{selectedRecordId})
+              {inner?.clinical_strategy
+                ? ` · ${inner.clinical_strategy.slice(0, 100)}${inner.clinical_strategy.length > 100 ? "…" : ""}`
+                : ""}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
             <StatusBadge status={status} />
             <Button
               variant="ghost"
               size="sm"
               loading={actionBusy === "reject"}
               onClick={() => decide("reject")}
-              className="text-red-600"
+              style={{ color: "#dc2626", borderColor: "#fecaca" }}
             >
               Reject
             </Button>
@@ -340,121 +475,223 @@ export default function MealMatrix({
             </Button>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-          <ShadButton
-            type="button"
+
+        {/* bottom row: draft actions */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 8,
+            padding: "10px 20px",
+            borderTop: "1px solid #f1f5f9",
+            background: "#fafafa",
+          }}
+        >
+          <ShadBtn
             variant="secondary"
-            size="sm"
             disabled={planActionBusy}
             onClick={saveDraftToServer}
           >
             Save draft
-          </ShadButton>
-          <ShadButton
-            type="button"
+          </ShadBtn>
+          <ShadBtn
             variant="outline"
-            size="sm"
             disabled={planActionBusy}
             onClick={regenerateDraft}
           >
             Regenerate plan
-          </ShadButton>
-          <ShadButton
-            type="button"
+          </ShadBtn>
+          <ShadBtn
             variant="destructive"
-            size="sm"
             disabled={planActionBusy}
             onClick={discardDraft}
           >
             Discard draft
-          </ShadButton>
-          {planActionMsg ? (
-            <span className="text-xs text-slate-500">{planActionMsg}</span>
-          ) : null}
+          </ShadBtn>
+          {planActionMsg && (
+            <span style={{ fontSize: 12.5, color: "#64748b", marginLeft: 4 }}>
+              {planActionMsg}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Strategic guidance */}
-      <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-6 shadow-sm">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-indigo-900">
+      {/* ── Clinical strategy ── */}
+      <div
+        style={{
+          background: "#f5f3ff",
+          border: "1.5px solid #ddd6fe",
+          borderLeft: "4px solid #6366f1",
+          borderRadius: 14,
+          padding: "18px 22px",
+          boxShadow: "0 1px 3px rgba(0,0,0,.05)",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: ".07em",
+            color: "#6366f1",
+            marginBottom: 10,
+          }}
+        >
           Strategic guidance (clinical notes)
-        </h3>
-        <p className="mt-1 text-xs text-indigo-700/90">
-          Editable summary aligned with the generated matrix; patients may see
-          approved strategy text.
+        </div>
+        <p style={{ fontSize: 12.5, color: "#7c3aed", marginBottom: 12 }}>
+          Editable summary aligned with the generated matrix; approved text may
+          be visible to patients.
         </p>
         <textarea
-          className={`${inputClass} mt-4 min-h-[120px] border-indigo-200 bg-white`}
+          className={inputClass}
+          style={{ minHeight: 110, borderColor: "#ddd6fe", background: "#fff" }}
           value={inner?.clinical_strategy ?? ""}
           onChange={(e) =>
             patchPlan((p) => ({
               ...p,
-              plan: {
-                ...p.plan,
-                clinical_strategy: e.target.value,
-              },
+              plan: { ...p.plan, clinical_strategy: e.target.value },
             }))
           }
         />
       </div>
 
-      {/* Optional llm_outputs — keep editable textareas */}
+      {/* ── Supplementary LLM outputs ── */}
       {inner?.llm_outputs && (
-        <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-900">
+        <div
+          style={{
+            background: "#fff",
+            border: "1.5px solid #e2e8f0",
+            borderRadius: 14,
+            padding: "20px 22px",
+            boxShadow: "0 1px 3px rgba(0,0,0,.05)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "#0f172a",
+              marginBottom: 14,
+            }}
+          >
             Supplementary LLM outputs
-          </h3>
-          {[
-            ["clinical_logic", "Diet rules & priorities"],
-            ["culinary_creative", "Meal ideas"],
-            ["rag_retrieval", "Reference guidance"],
-          ].map(([key, lbl]) =>
-            inner.llm_outputs[key] != null ? (
-              <label key={key} className="block">
-                <span className={labelClass}>{lbl}</span>
-                <textarea
-                  className={inputClass}
-                  rows={4}
-                  value={inner.llm_outputs[key] || ""}
-                  onChange={(e) =>
-                    patchPlan((p) => ({
-                      ...p,
-                      plan: {
-                        ...p.plan,
-                        llm_outputs: {
-                          ...p.plan.llm_outputs,
-                          [key]: e.target.value,
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {[
+              ["clinical_logic", "Diet rules & priorities", "#6366f1"],
+              ["culinary_creative", "Meal ideas", "#10b981"],
+              ["rag_retrieval", "Reference guidance", "#0ea5e9"],
+            ].map(([key, lbl, accent]) =>
+              inner.llm_outputs[key] != null ? (
+                <div
+                  key={key}
+                  style={{
+                    borderLeft: `3px solid ${accent}`,
+                    paddingLeft: 14,
+                  }}
+                >
+                  <label className={labelClass} style={{ color: accent }}>
+                    {lbl}
+                  </label>
+                  <textarea
+                    className={inputClass}
+                    rows={4}
+                    value={inner.llm_outputs[key] || ""}
+                    onChange={(e) =>
+                      patchPlan((p) => ({
+                        ...p,
+                        plan: {
+                          ...p.plan,
+                          llm_outputs: {
+                            ...p.plan.llm_outputs,
+                            [key]: e.target.value,
+                          },
                         },
-                      },
-                    }))
-                  }
-                />
-              </label>
-            ) : null,
-          )}
+                      }))
+                    }
+                  />
+                </div>
+              ) : null,
+            )}
+          </div>
         </div>
       )}
 
-      {/* Weekly matrix */}
+      {/* ── Weekly matrix ── */}
       {weekly ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))",
+            gap: 16,
+          }}
+        >
           {DAYS.map((day) => (
             <div
               key={day}
-              className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+              style={{
+                background: "#fff",
+                border: "1.5px solid #e2e8f0",
+                borderRadius: 16,
+                overflow: "hidden",
+                boxShadow: "0 1px 3px rgba(0,0,0,.06)",
+              }}
             >
-              <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
-                <h4 className="text-base font-bold text-slate-900">{day}</h4>
-                <span className="text-xs font-medium text-slate-500">
-                  Day total:{" "}
+              {/* day header */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "14px 18px",
+                  borderBottom: "1px solid #f1f5f9",
+                  background: "#fafafa",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 800,
+                    color: "#0f172a",
+                    letterSpacing: "-.02em",
+                  }}
+                >
+                  {day}
+                </span>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 12,
+                    color: "#64748b",
+                  }}
+                >
+                  <span>Total:</span>
                   <input
-                    className="ml-1 w-20 rounded border border-slate-200 px-1.5 py-0.5 text-right text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                    style={{
+                      width: 68,
+                      textAlign: "right",
+                      border: "1.5px solid #e2e8f0",
+                      borderRadius: 7,
+                      padding: "3px 8px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: "#0f172a",
+                      background: "#fff",
+                      outline: "none",
+                    }}
                     value={weekly[day]?.day_total_kcal ?? ""}
                     onChange={(e) => {
                       const v = e.target.value;
                       patchPlan((p) => {
                         const w = p.plan.meal_matrix.weekly;
-                        const dayObj = { ...w[day], day_total_kcal: v === "" ? "" : Number(v) };
+                        const dayObj = {
+                          ...w[day],
+                          day_total_kcal: v === "" ? "" : Number(v),
+                        };
                         return {
                           ...p,
                           plan: {
@@ -467,69 +704,163 @@ export default function MealMatrix({
                         };
                       });
                     }}
-                  />{" "}
-                  kcal
-                </span>
+                  />
+                  <span>kcal</span>
+                </div>
               </div>
-              <div className="flex flex-col gap-5">
+
+              {/* meals */}
+              <div
+                style={{
+                  padding: "14px 14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
                 {MEALS.map((meal) => {
                   const block = weekly[day]?.[meal] || { foods: [] };
                   const foods = block.foods || [];
+                  const col = MEAL_COLOR[meal];
                   return (
                     <div
                       key={meal}
-                      className="rounded-lg border border-slate-100 bg-slate-50/40 p-3"
+                      style={{
+                        border: "1.5px solid #f1f5f9",
+                        borderRadius: 12,
+                        overflow: "hidden",
+                        background: "#fafafa",
+                      }}
                     >
-                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs font-bold uppercase tracking-wide text-slate-700">
-                          {meal}
-                        </span>
-                        <span className="rounded border border-indigo-200 bg-white px-2 py-0.5 font-mono text-[11px] text-indigo-800">
+                      {/* meal header */}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: 8,
+                          padding: "10px 12px",
+                          borderBottom: "1px solid #f1f5f9",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 800,
+                            padding: "2px 8px",
+                            borderRadius: 6,
+                            border: `1px solid ${col.border}`,
+                            background: col.bg,
+                            color: col.color,
+                          }}
+                        >
                           <input
-                            className="w-14 border-0 bg-transparent p-0 text-center text-[11px] focus:ring-0"
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              outline: "none",
+                              fontSize: "inherit",
+                              fontWeight: "inherit",
+                              color: "inherit",
+                              width: 46,
+                              textAlign: "center",
+                              cursor: "text",
+                            }}
                             value={block.slot_time ?? MEAL_TIME[meal] ?? ""}
                             onChange={(e) =>
-                              onPatchMealMeta(day, meal, "slot_time", e.target.value)
+                              onPatchMealMeta(
+                                day,
+                                meal,
+                                "slot_time",
+                                e.target.value,
+                              )
                             }
                             aria-label={`${day} ${meal} time`}
                           />
                         </span>
-                      </div>
-                      <label className="mb-2 block">
-                        <span className={labelClass}>Meal kcal</span>
-                        <input
-                          className={inputClass}
-                          inputMode="decimal"
-                          value={block.meal_kcal ?? ""}
-                          onChange={(e) =>
-                            onPatchMealMeta(
-                              day,
-                              meal,
-                              "meal_kcal",
-                              e.target.value === ""
-                                ? ""
-                                : Number(e.target.value),
-                            )
-                          }
-                        />
-                      </label>
-                      <div className="space-y-3">
-                        {foods.map((food, idx) => (
-                          <FoodRow
-                            key={`${day}-${meal}-${idx}`}
-                            day={day}
-                            meal={meal}
-                            index={idx}
-                            food={food}
-                            onPatchFood={onPatchFood}
+                        <span
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                            letterSpacing: ".05em",
+                            color: "#475569",
+                          }}
+                        >
+                          {meal}
+                        </span>
+                        <div
+                          style={{
+                            marginLeft: "auto",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                            kcal
+                          </span>
+                          <input
+                            style={{
+                              width: 60,
+                              border: "1.5px solid #e2e8f0",
+                              borderRadius: 6,
+                              padding: "2px 6px",
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: "#0f172a",
+                              background: "#fff",
+                              textAlign: "right",
+                              outline: "none",
+                            }}
+                            inputMode="decimal"
+                            value={block.meal_kcal ?? ""}
+                            onChange={(e) =>
+                              onPatchMealMeta(
+                                day,
+                                meal,
+                                "meal_kcal",
+                                e.target.value === ""
+                                  ? ""
+                                  : Number(e.target.value),
+                              )
+                            }
                           />
-                        ))}
-                        {foods.length === 0 ? (
-                          <p className="text-xs italic text-slate-400">
-                            No foods listed — add rows via regenerate or edit
-                            upstream.
+                        </div>
+                      </div>
+
+                      {/* food rows */}
+                      <div
+                        style={{
+                          padding: "10px 12px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 8,
+                        }}
+                      >
+                        {foods.length > 0 ? (
+                          foods.map((food, idx) => (
+                            <FoodRow
+                              key={`${day}-${meal}-${idx}`}
+                              day={day}
+                              meal={meal}
+                              index={idx}
+                              food={food}
+                              onPatchFood={onPatchFood}
+                            />
+                          ))
+                        ) : (
+                          <p
+                            style={{
+                              fontSize: 12,
+                              color: "#94a3b8",
+                              fontStyle: "italic",
+                              padding: "4px 0",
+                            }}
+                          >
+                            No foods listed — add via regenerate.
                           </p>
-                        ) : null}
+                        )}
                       </div>
                     </div>
                   );
@@ -539,30 +870,59 @@ export default function MealMatrix({
           ))}
         </div>
       ) : mm?.meals?.length ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-6 shadow-sm">
-          <p className="mb-4 text-sm text-amber-900">
-            Full weekly matrix unavailable — editing flat meal preview (stub or
-            legacy). Regenerate with the AI service for the 7-day grid.
+        /* ── Flat meals fallback ── */
+        <div
+          style={{
+            background: "#fffbeb",
+            border: "1.5px solid #fde68a",
+            borderRadius: 14,
+            padding: "20px 22px",
+          }}
+        >
+          <p
+            style={{
+              fontSize: 13.5,
+              color: "#92400e",
+              marginBottom: 16,
+              fontWeight: 600,
+            }}
+          >
+            Full weekly matrix unavailable — editing flat meal preview.
+            Regenerate for the 7-day grid.
           </p>
-          <div className="space-y-4">
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {mm.meals.map((m, i) => (
               <div
                 key={i}
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                style={{
+                  background: "#fff",
+                  border: "1.5px solid #e2e8f0",
+                  borderRadius: 12,
+                  padding: "14px 16px",
+                  boxShadow: "0 1px 2px rgba(0,0,0,.04)",
+                }}
               >
-                <div className="flex flex-wrap gap-3">
-                  <label className="block">
-                    <span className={labelClass}>Time</span>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 10,
+                    marginBottom: 10,
+                  }}
+                >
+                  <div>
+                    <label className={labelClass}>Time</label>
                     <input
                       className={inputClass}
+                      style={{ width: 100 }}
                       value={m.time ?? ""}
                       onChange={(e) =>
                         onPatchFlatMeal(i, "time", e.target.value)
                       }
                     />
-                  </label>
-                  <label className="block min-w-[200px] flex-1">
-                    <span className={labelClass}>Meal</span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <label className={labelClass}>Meal name</label>
                     <input
                       className={inputClass}
                       value={m.name ?? ""}
@@ -570,10 +930,10 @@ export default function MealMatrix({
                         onPatchFlatMeal(i, "name", e.target.value)
                       }
                     />
-                  </label>
+                  </div>
                 </div>
-                <label className="mt-2 block">
-                  <span className={labelClass}>Notes / kcal line</span>
+                <div>
+                  <label className={labelClass}>Notes / kcal line</label>
                   <input
                     className={inputClass}
                     value={m.notes ?? ""}
@@ -581,10 +941,17 @@ export default function MealMatrix({
                       onPatchFlatMeal(i, "notes", e.target.value)
                     }
                   />
-                </label>
+                </div>
                 {Array.isArray(m.foods) &&
                   m.foods.map((food, fi) => (
-                    <div key={fi} className="mt-3 border-t border-slate-100 pt-3">
+                    <div
+                      key={fi}
+                      style={{
+                        marginTop: 12,
+                        borderTop: "1px solid #f1f5f9",
+                        paddingTop: 12,
+                      }}
+                    >
                       <FoodRow
                         day="Preview"
                         meal={String(i)}
@@ -592,7 +959,9 @@ export default function MealMatrix({
                         food={food}
                         onPatchFood={(day, meal, idx, field, raw) => {
                           patchPlan((p) => {
-                            const mealsArr = [...(p.plan.meal_matrix.meals || [])];
+                            const mealsArr = [
+                              ...(p.plan.meal_matrix.meals || []),
+                            ];
                             const row = { ...mealsArr[i] };
                             const fods = [...(row.foods || [])];
                             const prev = fods[idx] || {};
@@ -636,7 +1005,17 @@ export default function MealMatrix({
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
+        <div
+          style={{
+            background: "#fff",
+            border: "1.5px solid #e2e8f0",
+            borderRadius: 14,
+            padding: "32px 24px",
+            textAlign: "center",
+            fontSize: 14,
+            color: "#94a3b8",
+          }}
+        >
           No meal rows in this draft.
         </div>
       )}
