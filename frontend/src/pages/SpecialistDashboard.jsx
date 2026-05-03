@@ -360,27 +360,92 @@ export default function SpecialistDashboard() {
   useEffect(() => {
     const rid = dashboardData.selectedRecordId;
     if (!rid) {
-      setDashboardData((d) => ({ ...d, patientView: null }));
+      setDashboardData((d) => ({ ...d, patientView: null, plan: null, result: null }));
       return;
     }
     let cancelled = false;
-    patientApi
-      .getForSpecialist(rid)
-      .then((p) => {
-        if (!cancelled)
-          setDashboardData((prev) => ({ ...prev, patientView: p }));
-      })
-      .catch(() => {
-        if (!cancelled)
-          setDashboardData((prev) => ({ ...prev, patientView: null }));
-      });
+    (async () => {
+      const [patientRes, specialistRes, latestPlanRes] = await Promise.allSettled([
+        patientApi.getForSpecialist(rid),
+        medicalApi.getSpecialistObject(rid),
+        recommendationApi.getLatestPlan(rid),
+      ]);
+      if (cancelled) return;
+
+      const patientView =
+        patientRes.status === "fulfilled" ? patientRes.value : null;
+      const specialistObject =
+        specialistRes.status === "fulfilled" ? specialistRes.value : null;
+      const latestPlan =
+        latestPlanRes.status === "fulfilled" ? latestPlanRes.value : null;
+
+      const biomarkers = specialistObject?.biomarkers || {};
+      const body = specialistObject?.body_composition || {};
+      const constraints = Array.isArray(specialistObject?.clinical_constraints)
+        ? specialistObject.clinical_constraints
+        : [];
+      const allergyValues = constraints
+        .filter((c) => c?.type === "allergy")
+        .map((c) => String(c.value || "").trim())
+        .filter(Boolean);
+      const restrictionValues = constraints
+        .filter((c) => c?.type === "restriction")
+        .map((c) => String(c.value || "").trim())
+        .filter(Boolean);
+      const noteValues = constraints
+        .filter((c) => c?.type === "note")
+        .map((c) => String(c.value || "").trim())
+        .filter(Boolean);
+
+      setDashboardData((prev) => ({
+        ...prev,
+        patientView,
+        plan: latestPlan,
+        result: specialistObject,
+        primaryDisease:
+          specialistObject?.primary_disease ??
+          specialistObject?.icd10 ??
+          "",
+        severity: specialistObject?.severity ?? "Moderate",
+        comorbiditiesText: Array.isArray(specialistObject?.comorbidities)
+          ? specialistObject.comorbidities.join("\n")
+          : "None",
+        geneticText: Array.isArray(specialistObject?.genetic_risk_factors)
+          ? specialistObject.genetic_risk_factors.join("\n")
+          : "",
+        systolic:
+          biomarkers?.systolic_bp != null ? String(biomarkers.systolic_bp) : "",
+        diastolic:
+          biomarkers?.diastolic_bp != null ? String(biomarkers.diastolic_bp) : "",
+        glucose: biomarkers?.glucose != null ? String(biomarkers.glucose) : "",
+        cholesterol:
+          biomarkers?.cholesterol != null ? String(biomarkers.cholesterol) : "",
+        fatPct:
+          (body?.body_fat_percentage ?? body?.fat_pct) != null
+            ? String(body?.body_fat_percentage ?? body?.fat_pct)
+            : "",
+        waterPct:
+          (body?.body_water_percentage ?? body?.water_pct) != null
+            ? String(body?.body_water_percentage ?? body?.water_pct)
+            : "",
+        muscleKg: body?.muscle_mass_kg != null ? String(body.muscle_mass_kg) : "",
+        visceral:
+          body?.visceral_fat_level != null ? String(body.visceral_fat_level) : "",
+        metabolicAge:
+          body?.metabolic_age != null ? String(body.metabolic_age) : "",
+        allergiesText: allergyValues.join("\n"),
+        restrictionsText: restrictionValues.join("\n"),
+        mandatoryNotes: noteValues.join("\n"),
+        journalReview:
+          latestPlan?.plan?.llm_outputs ??
+          latestPlan?.llm_outputs ??
+          null,
+        decision: null,
+      }));
+    })();
     return () => {
       cancelled = true;
     };
-  }, [dashboardData.selectedRecordId]);
-
-  useEffect(() => {
-    setDashboardData((d) => ({ ...d, journalReview: null, decision: null }));
   }, [dashboardData.selectedRecordId]);
 
   /* ── elapsed timer ──────────────────────────────────────────────────── */
@@ -559,6 +624,12 @@ export default function SpecialistDashboard() {
       clinical_strategy: plan.plan.clinical_strategy,
       meal_matrix: plan.plan.meal_matrix,
     });
+    const refreshed = await recommendationApi.getLatestPlan(selectedRecordId);
+    setDashboardData((d) => ({
+      ...d,
+      plan: refreshed,
+      journalReview: refreshed?.plan?.llm_outputs ?? refreshed?.llm_outputs ?? d.journalReview,
+    }));
   }
 
   async function discardDraft() {
