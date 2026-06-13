@@ -6,8 +6,11 @@ async function generatePlan(req, res, next) {
     if (!Number.isFinite(patientId)) {
       return res.status(400).json({ error: "Invalid patientId" });
     }
+    const target_macros =
+      req.body?.target_macros ?? req.body?.targetMacros ?? null;
     const { jobId, status } = await recommendationService.startPlanGeneration(
       patientId,
+      { target_macros },
     );
     return res.status(202).json({
       jobId,
@@ -124,8 +127,11 @@ async function regeneratePlan(req, res, next) {
     if (!Number.isFinite(patientId)) {
       return res.status(400).json({ error: "Invalid patientId" });
     }
+    const target_macros =
+      req.body?.target_macros ?? req.body?.targetMacros ?? null;
     const { jobId, status } = await recommendationService.startPlanGeneration(
       patientId,
+      { target_macros },
     );
     return res.status(202).json({
       jobId,

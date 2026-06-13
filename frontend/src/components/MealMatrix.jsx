@@ -38,19 +38,33 @@ const DAYS = [
   "Saturday",
   "Sunday",
 ];
-const MEALS = ["Breakfast", "Morning Snack", "Lunch", "Dinner"];
+const MEALS = ["Breakfast", "Lunch", "Dinner", "Snack"];
 const MEAL_TIME = {
   Breakfast: "08:00",
-  "Morning Snack": "10:30",
   Lunch: "13:00",
   Dinner: "19:00",
+  Snack: "15:30",
+  "Morning Snack": "15:30",
 };
 const MEAL_COLOR = {
   Breakfast: { bg: "#eef2ff", color: "#6366f1", border: "#c7d2fe" },
+  Snack: { bg: "#f0f9ff", color: "#0ea5e9", border: "#bae6fd" },
   "Morning Snack": { bg: "#f0f9ff", color: "#0ea5e9", border: "#bae6fd" },
   Lunch: { bg: "#f0fdf4", color: "#16a34a", border: "#bbf7d0" },
   Dinner: { bg: "#fffbeb", color: "#d97706", border: "#fde68a" },
 };
+
+function mealKeyFor(dayData, meal) {
+  if (!dayData) return meal;
+  if (dayData[meal]) return meal;
+  if (meal === "Snack" && dayData["Morning Snack"]) return "Morning Snack";
+  return meal;
+}
+
+function getMealBlock(dayData, meal) {
+  const key = mealKeyFor(dayData, meal);
+  return dayData?.[key] || { foods: [] };
+}
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
 function parseNum(raw) {
@@ -230,9 +244,11 @@ export default function MealMatrix({
 
   const plan = dashboardData.plan;
   const decision = dashboardData.decision;
-  const inner = plan?.plan;
-  const mm = inner?.meal_matrix;
+  const inner = plan?.plan ?? plan;
+  const mm = inner?.meal_matrix ?? plan?.meal_matrix;
   const weekly = mm?.weekly;
+  const apiStatus = plan?.status ?? inner?.status;
+  const isPublished = apiStatus === "approved";
 
   function patchPlan(updater) {
     setDashboardData((d) => {
@@ -244,10 +260,12 @@ export default function MealMatrix({
 
   function onPatchFood(day, meal, foodIndex, field, raw) {
     patchPlan((p) => {
-      if (!p?.plan?.meal_matrix?.weekly?.[day]?.[meal]) return p;
-      const weeklyPrev = p.plan.meal_matrix.weekly;
-      const dayObj = { ...weeklyPrev[day] };
-      const mealObj = { ...dayObj[meal] };
+      const weeklyPrev = p.plan?.meal_matrix?.weekly;
+      const dayPrev = weeklyPrev?.[day];
+      const mk = mealKeyFor(dayPrev, meal);
+      if (!dayPrev?.[mk]) return p;
+      const dayObj = { ...dayPrev };
+      const mealObj = { ...dayObj[mk] };
       const foods = [...(mealObj.foods || [])];
       const prev = foods[foodIndex] || {};
       let nextVal = raw;
@@ -265,7 +283,7 @@ export default function MealMatrix({
       mealObj.foods = foods;
       mealObj.meal_kcal =
         Math.round(foods.reduce((s, f) => s + parseNum(f.kcal), 0) * 10) / 10;
-      dayObj[meal] = mealObj;
+      dayObj[mk] = mealObj;
       let dayTotal = 0;
       for (const m of MEALS) dayTotal += parseNum(dayObj[m]?.meal_kcal);
       dayObj.day_total_kcal = Math.round(dayTotal * 10) / 10;
@@ -284,9 +302,11 @@ export default function MealMatrix({
 
   function onPatchMealMeta(day, meal, field, raw) {
     patchPlan((p) => {
-      if (!p?.plan?.meal_matrix?.weekly?.[day]?.[meal]) return p;
-      const w = p.plan.meal_matrix.weekly;
-      const dayObj = { ...w[day], [meal]: { ...w[day][meal], [field]: raw } };
+      const w = p.plan?.meal_matrix?.weekly;
+      const dayPrev = w?.[day];
+      const mk = mealKeyFor(dayPrev, meal);
+      if (!dayPrev?.[mk]) return p;
+      const dayObj = { ...dayPrev, [mk]: { ...dayPrev[mk], [field]: raw } };
       return {
         ...p,
         plan: {
@@ -330,16 +350,25 @@ export default function MealMatrix({
   }
 
   /* ── empty state ── */
-  if (!plan) {
+  if (!plan || !weekly) {
     return (
       <div className="sd-empty">
         <div className="sd-empty-icon">
           <Icon d={I.calendar} size={26} stroke="#94a3b8" sw={1.5} />
         </div>
-        <div className="sd-empty-title">No draft plan yet</div>
+        <div className="sd-empty-title">
+          {selectedRecordId ? "No meal plan yet" : "Select a patient"}
+        </div>
         <div className="sd-empty-sub">
-          Use the <strong>Workspace</strong> tab to submit clinical data and
-          generate a meal matrix.
+          {selectedRecordId ? (
+            <>
+              This patient has no saved meal matrix. Use the{" "}
+              <strong>Workspace</strong> tab to set clinical data and generate a
+              plan.
+            </>
+          ) : (
+            <>Choose a patient from the Workspace tab to load their plan.</>
+          )}
         </div>
       </div>
     );
@@ -352,7 +381,7 @@ export default function MealMatrix({
         ? "rejected"
         : decision === "modify"
           ? "modify"
-          : "pending";
+          : apiStatus || "pending";
 
   return (
     <div
@@ -407,10 +436,10 @@ export default function MealMatrix({
               variant="green"
               loading={actionBusy === "approve"}
               onClick={() => decide("approve")}
-              disabled={!!decision}
+              disabled={!!decision || isPublished}
             >
               <Icon d={I.check} size={13} stroke="currentColor" sw={2.5} />
-              Approve &amp; publish
+              {isPublished ? "Published" : "Approve & publish"}
             </Btn>
           </div>
         </div>
@@ -423,7 +452,7 @@ export default function MealMatrix({
             onClick={saveDraftToServer}
           >
             <Icon d={I.save} size={12} stroke="currentColor" />
-            Save draft
+            {isPublished ? "Save changes" : "Save draft"}
           </Btn>
           <Btn
             variant="outline"
@@ -435,7 +464,7 @@ export default function MealMatrix({
           </Btn>
           <Btn
             variant="destructive"
-            disabled={planActionBusy}
+            disabled={planActionBusy || isPublished}
             onClick={discardDraft}
           >
             <Icon d={I.trash} size={12} stroke="currentColor" />
@@ -450,6 +479,47 @@ export default function MealMatrix({
           )}
         </div>
       </div>
+
+      {/* ── Approved caloric target ── */}
+      {inner?.target_macros && (
+        <div className="sd-tdee-panel sd-tdee-panel-compact">
+          <div className="sd-tdee-panel-header">
+            <div>
+              <div className="sd-tdee-panel-title">Approved caloric target</div>
+              <div className="sd-tdee-panel-sub">
+                Used for this matrix generation
+              </div>
+            </div>
+            <div className="sd-tdee-kcal-hero">
+              <span className="sd-tdee-kcal-num">{inner.target_macros.kcal}</span>
+              <span className="sd-tdee-kcal-unit">kcal / day</span>
+            </div>
+          </div>
+          <div className="sd-tdee-macros">
+            <div className="sd-tdee-macro">
+              <div className="sd-tdee-macro-label">Protein</div>
+              <div className="sd-tdee-macro-value">
+                {inner.target_macros.protein_g}
+                <span className="sd-tdee-macro-unit">g</span>
+              </div>
+            </div>
+            <div className="sd-tdee-macro">
+              <div className="sd-tdee-macro-label">Carbs</div>
+              <div className="sd-tdee-macro-value">
+                {inner.target_macros.carbs_g}
+                <span className="sd-tdee-macro-unit">g</span>
+              </div>
+            </div>
+            <div className="sd-tdee-macro">
+              <div className="sd-tdee-macro-label">Fat</div>
+              <div className="sd-tdee-macro-value">
+                {inner.target_macros.fat_g}
+                <span className="sd-tdee-macro-unit">g</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Clinical strategy ── */}
       <div className="sd-strategy-box">
@@ -472,66 +542,6 @@ export default function MealMatrix({
           }
         />
       </div>
-
-      {/* ── LLM supplementary outputs ── */}
-      {inner?.llm_outputs && (
-        <div className="sd-card">
-          <div className="sd-card-header">
-            <div className="sd-card-icon">
-              <Icon d={I.bolt} size={14} />
-            </div>
-            <div className="sd-card-title">Supplementary AI outputs</div>
-          </div>
-          <div className="sd-card-body">
-            {[
-              {
-                key: "clinical_logic",
-                label: "Diet rules & priorities",
-                accent: "#6366f1",
-              },
-              {
-                key: "culinary_creative",
-                label: "Meal ideas",
-                accent: "#10b981",
-              },
-              {
-                key: "rag_retrieval",
-                label: "Reference guidance",
-                accent: "#0ea5e9",
-              },
-            ].map(({ key, label, accent }) =>
-              inner.llm_outputs[key] != null ? (
-                <div
-                  key={key}
-                  className="sd-llm-field"
-                  style={{ borderLeftColor: accent }}
-                >
-                  <label className="sd-label" style={{ color: accent }}>
-                    {label}
-                  </label>
-                  <textarea
-                    className="sd-input"
-                    rows={4}
-                    value={inner.llm_outputs[key] || ""}
-                    onChange={(e) =>
-                      patchPlan((p) => ({
-                        ...p,
-                        plan: {
-                          ...p.plan,
-                          llm_outputs: {
-                            ...p.plan.llm_outputs,
-                            [key]: e.target.value,
-                          },
-                        },
-                      }))
-                    }
-                  />
-                </div>
-              ) : null,
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ── Weekly matrix grid ── */}
       {weekly ? (
@@ -579,7 +589,7 @@ export default function MealMatrix({
               {/* Meals */}
               <div className="sd-day-meals">
                 {MEALS.map((meal) => {
-                  const block = weekly[day]?.[meal] || { foods: [] };
+                  const block = getMealBlock(weekly[day], meal);
                   const foods = block.foods || [];
                   const col = MEAL_COLOR[meal];
                   return (

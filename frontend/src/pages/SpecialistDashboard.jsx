@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ClinicalInputForm from "../components/ClinicalInputForm.jsx";
 import MealMatrix from "../components/MealMatrix.jsx";
 import PatientInsightView from "../components/PatientInsightView.jsx";
 import { medicalApi, patientApi, recommendationApi } from "../api/baseFetch.js";
 import { pollUntilMatrixDone } from "../api/recommendationApi.js";
+import {
+  normalizePlanForDashboard,
+  planHasMatrix,
+} from "../utils/planShape.js";
 import "./SpecialistDashboard.css";
 
 /* ── tiny icon helper ─────────────────────────────────────────────────────── */
@@ -322,6 +326,12 @@ export default function SpecialistDashboard() {
     journalReview: null,
   });
 
+  const [tdeeGoal, setTdeeGoal] = useState("maintenance");
+  const activeTdeeTargetsRef = useRef(null);
+  const onTdeeTargetsChange = useCallback((targets) => {
+    activeTdeeTargetsRef.current = targets;
+  }, []);
+
   const [activeTab, setActiveTab] = useState("workspace");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -333,6 +343,7 @@ export default function SpecialistDashboard() {
   const [matrixElapsedSec, setMatrixElapsedSec] = useState(0);
   const [journalBusy, setJournalBusy] = useState(false);
   const [journalError, setJournalError] = useState("");
+  const [planLoading, setPlanLoading] = useState(false);
 
   /* ── search ─────────────────────────────────────────────────────────── */
   const runSearch = useCallback(async () => {
@@ -361,9 +372,11 @@ export default function SpecialistDashboard() {
     const rid = dashboardData.selectedRecordId;
     if (!rid) {
       setDashboardData((d) => ({ ...d, patientView: null, plan: null, result: null }));
+      setPlanLoading(false);
       return;
     }
     let cancelled = false;
+    setPlanLoading(true);
     (async () => {
       const [patientRes, specialistRes, latestPlanRes] = await Promise.allSettled([
         patientApi.getForSpecialist(rid),
@@ -376,8 +389,9 @@ export default function SpecialistDashboard() {
         patientRes.status === "fulfilled" ? patientRes.value : null;
       const specialistObject =
         specialistRes.status === "fulfilled" ? specialistRes.value : null;
-      const latestPlan =
+      const latestPlanRaw =
         latestPlanRes.status === "fulfilled" ? latestPlanRes.value : null;
+      const latestPlan = normalizePlanForDashboard(latestPlanRaw);
 
       const biomarkers = specialistObject?.biomarkers || {};
       const body = specialistObject?.body_composition || {};
@@ -436,12 +450,23 @@ export default function SpecialistDashboard() {
         allergiesText: allergyValues.join("\n"),
         restrictionsText: restrictionValues.join("\n"),
         mandatoryNotes: noteValues.join("\n"),
-        journalReview:
-          latestPlan?.plan?.llm_outputs ??
-          latestPlan?.llm_outputs ??
-          null,
         decision: null,
       }));
+      const savedGoal =
+        latestPlan?.plan?.target_macros?.goal ??
+        latestPlan?.target_macros?.goal;
+      if (
+        savedGoal === "loss" ||
+        savedGoal === "maintenance" ||
+        savedGoal === "gain"
+      ) {
+        setTdeeGoal(savedGoal);
+      }
+
+      if (planHasMatrix(latestPlan)) {
+        setActiveTab("meal");
+      }
+      setPlanLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -534,7 +559,10 @@ export default function SpecialistDashboard() {
       setDashboardData((d) => ({ ...d, result: specObj }));
 
       setPlanActionMsg("Starting meal matrix job…");
-      const start = await recommendationApi.generatePlan(selectedRecordId, {});
+      const target_macros = activeTdeeTargetsRef.current;
+      const start = await recommendationApi.generatePlan(selectedRecordId, {
+        target_macros,
+      });
       setMatrixJobInfo({ startedAt: Date.now() });
       setPlanActionMsg("Generating meal matrix…");
       await pollUntilMatrixDone(start.jobId);
@@ -545,8 +573,7 @@ export default function SpecialistDashboard() {
       });
       setDashboardData((d) => ({
         ...d,
-        plan: planData,
-        journalReview: planData.plan?.llm_outputs ?? null,
+        plan: normalizePlanForDashboard(planData),
       }));
       setPlanActionMsg("");
       setActiveTab("meal");
@@ -561,7 +588,7 @@ export default function SpecialistDashboard() {
 
   /* ── plan actions ───────────────────────────────────────────────────── */
   async function saveDraftToServer() {
-    const { selectedRecordId, plan, journalReview } = dashboardData;
+    const { selectedRecordId, plan } = dashboardData;
     if (!selectedRecordId || !plan?.plan) {
       setPlanActionMsg("Generate a plan first.");
       return;
@@ -571,13 +598,20 @@ export default function SpecialistDashboard() {
     setApproveSafetyError("");
     try {
       await recommendationApi.updateDraft(selectedRecordId, {
-        llm_outputs: journalReview,
         clinical_strategy: plan.plan.clinical_strategy,
         meal_matrix: plan.plan.meal_matrix,
         shopping_list: plan.plan.shopping_list,
-        target_macros: plan.plan.target_macros,
+        target_macros:
+          activeTdeeTargetsRef.current ?? plan.plan.target_macros,
       });
-      setPlanActionMsg("Draft saved.");
+      const refreshed = await recommendationApi.getLatestPlan(selectedRecordId);
+      setDashboardData((d) => ({
+        ...d,
+        plan: normalizePlanForDashboard(refreshed),
+      }));
+      setPlanActionMsg(
+        plan.status === "approved" ? "Changes saved." : "Draft saved.",
+      );
     } catch (e) {
       setPlanActionMsg(e.message || "Save failed");
     } finally {
@@ -592,10 +626,9 @@ export default function SpecialistDashboard() {
     setPlanActionMsg("Regenerating matrix…");
     setApproveSafetyError("");
     try {
-      const start = await recommendationApi.regeneratePlan(
-        selectedRecordId,
-        {},
-      );
+      const start = await recommendationApi.regeneratePlan(selectedRecordId, {
+        target_macros: activeTdeeTargetsRef.current,
+      });
       setMatrixJobInfo({ startedAt: Date.now() });
       await pollUntilMatrixDone(start.jobId);
       setMatrixJobInfo(null);
@@ -604,9 +637,8 @@ export default function SpecialistDashboard() {
       });
       setDashboardData((d) => ({
         ...d,
-        plan: planData,
+        plan: normalizePlanForDashboard(planData),
         decision: null,
-        journalReview: planData.plan?.llm_outputs ?? null,
       }));
       setPlanActionMsg("New AI draft generated.");
     } catch (e) {
@@ -618,17 +650,15 @@ export default function SpecialistDashboard() {
   }
 
   async function approvePlanFromDashboard() {
-    const { selectedRecordId, plan, journalReview } = dashboardData;
+    const { selectedRecordId, plan } = dashboardData;
     await recommendationApi.approvePlan(selectedRecordId, {
-      llm_outputs: journalReview,
       clinical_strategy: plan.plan.clinical_strategy,
       meal_matrix: plan.plan.meal_matrix,
     });
     const refreshed = await recommendationApi.getLatestPlan(selectedRecordId);
     setDashboardData((d) => ({
       ...d,
-      plan: refreshed,
-      journalReview: refreshed?.plan?.llm_outputs ?? refreshed?.llm_outputs ?? d.journalReview,
+      plan: normalizePlanForDashboard(refreshed),
     }));
   }
 
@@ -712,6 +742,9 @@ export default function SpecialistDashboard() {
               submit={submit}
               busy={busy}
               error={error}
+              tdeeGoal={tdeeGoal}
+              setTdeeGoal={setTdeeGoal}
+              onTdeeTargetsChange={onTdeeTargetsChange}
             />
             {dashboardData.result && (
               <SavedClinicalObject result={dashboardData.result} />
@@ -737,6 +770,15 @@ export default function SpecialistDashboard() {
       {/* ═══════ TAB: MEAL PLAN REVIEW ═══════ */}
       {activeTab === "meal" && (
         <div className="sd-tab-content">
+          {planLoading ? (
+            <div className="sd-empty">
+              <Spinner size={28} />
+              <div className="sd-empty-title" style={{ marginTop: 12 }}>
+                Loading meal plan…
+              </div>
+            </div>
+          ) : (
+            <>
           <MealMatrix
             dashboardData={dashboardData}
             setDashboardData={setDashboardData}
@@ -778,6 +820,8 @@ export default function SpecialistDashboard() {
                   ? "Plan rejected."
                   : "Plan flagged for modification."}
             </div>
+          )}
+            </>
           )}
         </div>
       )}

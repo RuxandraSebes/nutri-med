@@ -79,9 +79,10 @@ function ragMatrixToPlanShape(ragResult, patient) {
   // Build a flat meal list for the "meal_matrix.meals" field (first day preview)
   const MEAL_TIMES = {
     Breakfast: "08:00",
-    "Morning Snack": "10:30",
     Lunch: "13:00",
     Dinner: "19:00",
+    Snack: "15:30",
+    "Morning Snack": "15:30",
   };
 
   const DAYS = [
@@ -124,12 +125,7 @@ function ragMatrixToPlanShape(ragResult, patient) {
       },
     },
     shopping_list,
-    llm_outputs: {
-      clinical_logic: clinical_notes || "",
-      culinary_creative:
-        "Structured 7×4 meal matrix from patient/specialist context and Python-computed TDEE and macros.",
-      rag_retrieval: `Foods in plan: ${(foods_used || []).slice(0, 12).join(", ")}${(foods_used || []).length > 12 ? "…" : ""}`,
-    },
+    llm_outputs: null,
     target_macros: tdee || null,
   };
 }
@@ -161,13 +157,7 @@ function buildStubPlan({ patient, specialist }) {
       { item: "fish", qty: "400g" },
       { item: "vegetables", qty: "1kg" },
     ],
-    llm_outputs: {
-      clinical_logic: "Dietary rules based on your clinical assessment.",
-      culinary_creative:
-        "Meal ideas and ingredient mapping aligned with the dietary rules.",
-      rag_retrieval:
-        "Reference guidance summary (standards and nutrition considerations).",
-    },
+    llm_outputs: null,
   };
 }
 
@@ -190,8 +180,8 @@ function rowToApi(row) {
 /**
  * Start AI matrix job only (no polling). Frontend polls GET .../api/ai/matrix-status/:jobId.
  */
-async function startPlanGeneration(patientId) {
-  return requestMatrix(patientId);
+async function startPlanGeneration(patientId, opts = {}) {
+  return requestMatrix(patientId, { target_macros: opts.target_macros });
 }
 
 /**
@@ -391,9 +381,14 @@ async function approveLatestPlan(patientId, specialistUserId, edited = {}) {
 
 async function updateDraftPlan(patientId, patch = {}) {
   const row = await dietPlanRepository.getLatestPlanRow(patientId);
-  if (!row || row.status !== "pending") {
-    const err = new Error("No draft plan to update");
+  if (!row) {
+    const err = new Error("No plan found to update");
     err.status = 404;
+    throw err;
+  }
+  if (row.status !== "pending" && row.status !== "approved") {
+    const err = new Error("Latest plan cannot be edited in its current state");
+    err.status = 409;
     throw err;
   }
   const u = {};

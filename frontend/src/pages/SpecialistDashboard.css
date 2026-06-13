@@ -1060,3 +1060,170 @@ textarea.sd-input {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ── TDEE target panel ──────────────────────────────────────────────────── */
+.sd-tdee-panel {
+  background: var(--sd-surface);
+  border: 1.5px solid var(--sd-indigo-border);
+  border-radius: var(--sd-radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sd-tdee-panel-empty {
+  color: var(--sd-text-3);
+  font-size: 13.5px;
+  border-style: dashed;
+  border-color: var(--sd-border);
+  background: var(--sd-bg);
+}
+
+.sd-tdee-panel-compact {
+  margin-bottom: 16px;
+}
+
+.sd-tdee-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sd-tdee-panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sd-text);
+}
+
+.sd-tdee-panel-sub {
+  font-size: 12px;
+  color: var(--sd-text-3);
+  margin-top: 2px;
+}
+
+.sd-tdee-base {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.sd-tdee-base-label {
+  font-size: 11px;
+  color: var(--sd-text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sd-tdee-base-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--sd-indigo);
+}
+
+.sd-tdee-base-meta {
+  font-size: 11px;
+  color: var(--sd-text-3);
+}
+
+.sd-tdee-goal-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.sd-tdee-goal-btn {
+  border: 1.5px solid var(--sd-border);
+  border-radius: var(--sd-radius-xs);
+  background: var(--sd-bg);
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sd-tdee-goal-btn.active {
+  border-color: var(--sd-indigo);
+  background: var(--sd-indigo-bg);
+}
+
+.sd-tdee-goal-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sd-text);
+}
+
+.sd-tdee-goal-hint {
+  font-size: 11px;
+  color: var(--sd-text-3);
+}
+
+.sd-tdee-active {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sd-tdee-kcal-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sd-tdee-kcal-num {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--sd-indigo);
+  line-height: 1;
+}
+
+.sd-tdee-kcal-unit {
+  font-size: 13px;
+  color: var(--sd-text-3);
+  font-weight: 600;
+}
+
+.sd-tdee-macros {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.sd-tdee-macro {
+  background: var(--sd-bg);
+  border: 1px solid var(--sd-border);
+  border-radius: var(--sd-radius-xs);
+  padding: 10px 12px;
+}
+
+.sd-tdee-macro-label {
+  font-size: 11px;
+  color: var(--sd-text-3);
+  margin-bottom: 4px;
+}
+
+.sd-tdee-macro-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--sd-text);
+}
+
+.sd-tdee-macro-unit {
+  font-size: 12px;
+  color: var(--sd-text-3);
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.sd-tdee-footnote {
+  font-size: 12px;
+  color: var(--sd-text-3);
+  line-height: 1.5;
+  margin: 0;
+}

@@ -58,53 +58,65 @@ MATRIX_SKIP_RAG = os.getenv("MATRIX_SKIP_RAG", "0").strip().lower() in (
 MATRIX_SIMPLE_MODE = os.getenv("MATRIX_SIMPLE_MODE", "0").strip().lower() in (
     "1", "true", "yes", "on",
 )
-async def generateNutritionMatrixSimple(patientId: int) -> dict:
+async def generateNutritionMatrixSimple(
+    patientId: int, target_macros: dict | None = None
+) -> dict:
     """
     Simplified pipeline — no Chroma, no batching, no RAG.
-    Mirrors analyze-journal: one direct LLM call with patient + specialist context.
     Use with MATRIX_SIMPLE_MODE=1 for testing.
     """
     logger.info(f"[SIMPLE] Fetching patient context for id={patientId}")
     patient_ctx = await getPatientContext(patientId)
 
-    tdee = _calculate_tdee(patient_ctx)
-    logger.info(f"[SIMPLE] TDEE: {tdee['kcal']} kcal")
+    tdee = _resolve_tdee(patient_ctx, target_macros)
+    logger.info(
+        "[SIMPLE] TDEE target: %s kcal (source=%s)",
+        tdee["kcal"],
+        tdee.get("target_source", "computed"),
+    )
 
-    kcal      = tdee["kcal"]
+    kcal = tdee["kcal"]
     protein_g = tdee["protein_g"]
-    carbs_g   = tdee["carbs_g"]
-    fat_g     = tdee["fat_g"]
+    carbs_g = tdee["carbs_g"]
+    fat_g = tdee["fat_g"]
+    tdee_label = (
+        "SPECIALIST-SELECTED DAILY GOAL (from dashboard)"
+        if tdee.get("target_source") == "specialist_dashboard"
+        else "COMPUTED DAILY TARGETS"
+    )
 
     prompt = f"""You are a clinical nutrition expert. Generate a 7-day, 4-meal-per-day diet plan.
 
 PATIENT CLINICAL CONTEXT:
 {patient_ctx}
 
-COMPUTED DAILY TARGETS:
-- Energy: {kcal} kcal/day
+{tdee_label}:
+- Energy: {kcal} kcal/day (each day MUST total within ±{int(round(KCAL_TOLERANCE))} of this)
 - Protein: {protein_g}g | Carbs: {carbs_g}g | Fat: {fat_g}g
 
 RULES:
 1. Generate all 7 days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday.
-2. Each day has exactly 4 meals: Breakfast, Morning Snack, Lunch, Dinner.
-3. Each food entry must have: name, portion_g, kcal, protein_g, carbs_g, fat_g.
-4. Each day must include day_total_kcal (sum of meal kcal, within ±150 of {kcal}).
-5. Respect ALL allergies and restrictions in patient context.
-6. Do NOT write JavaScript comments (//) or ellipsis (...) placeholders.
-7. Write every single day and meal in full. No shortcuts.
-8. Output a single valid JSON object. No markdown. No text before or after.
+2. Each day has exactly 4 meals: Breakfast, Lunch, Dinner, Snack.
+3. Each meal lists exactly ONE single whole food in foods[] — no recipes, no multi-ingredient dishes, no compound names (no "and", "+", commas in name).
+4. Each food entry: name (single item), portion_g (grams), kcal, protein_g, carbs_g, fat_g — scale macros to portion_g.
+5. Within each day, all four food names must be different (no repeats on the same day).
+6. meal_kcal = ingredient kcal; day_total_kcal = sum of four meals.
+7. Respect ALL allergies and restrictions in patient context.
+8. Do NOT write JavaScript comments (//) or ellipsis (...) placeholders.
+9. Write every single day and meal in full. No shortcuts.
+10. Output a single valid JSON object. No markdown. No text before or after.
 
 JSON structure:
 {{
   "tdee": {{"kcal": {kcal}, "protein_g": {protein_g}, "carbs_g": {carbs_g}, "fat_g": {fat_g}}},
   "matrix": {{
-    "Monday":    {{"Breakfast": {{"foods": [{{"name":"...","portion_g":0,"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0}}],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
-    "Tuesday":   {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
-    "Wednesday": {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
-    "Thursday":  {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
-    "Friday":    {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
-    "Saturday":  {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
-    "Sunday":    {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Morning Snack": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}}
+    "Monday":    {{"Breakfast": {{"foods": [{{"name":"Oats","portion_g":80,"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0}}],"meal_kcal":0}}, "Lunch": {{"foods":[{{"name":"Chicken Breast","portion_g":150,"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0}}],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "Snack": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Tuesday":   {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "Snack": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Wednesday": {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "Snack": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Thursday":  {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "Snack": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Friday":    {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "Snack": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Saturday":  {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "Snack": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}},
+    "Sunday":    {{"Breakfast": {{"foods":[],"meal_kcal":0}}, "Lunch": {{"foods":[],"meal_kcal":0}}, "Dinner": {{"foods":[],"meal_kcal":0}}, "Snack": {{"foods":[],"meal_kcal":0}}, "day_total_kcal":0}}
   }},
   "clinical_notes": "Brief dietary strategy explanation.",
   "foods_used": ["food name 1", "food name 2"]
@@ -205,7 +217,10 @@ DAYS = [
     "Saturday",
     "Sunday",
 ]
-MEALS = ["Breakfast", "Morning Snack", "Lunch", "Dinner"]
+MEALS = ["Breakfast", "Lunch", "Dinner", "Snack"]
+LEGACY_SNACK_KEY = "Morning Snack"
+
+_COMPOUND_FOOD_RE = re.compile(r"\+|&|\band\b|,|\bwith\b", re.IGNORECASE)
 
 DISEASE_QUERY_MAP = {
     "diabetes": (
@@ -312,6 +327,59 @@ def _calculate_tdee(patient_context_str: str) -> dict:
     }
 
 
+def _resolve_tdee(patient_context_str: str, override: dict | None = None) -> dict:
+    """Use specialist-approved targets when provided; else compute from patient context."""
+    computed = _calculate_tdee(patient_context_str)
+    if not override or not isinstance(override, dict):
+        computed["target_source"] = "computed"
+        return computed
+    out = {**computed}
+    used_specialist_kcal = False
+    for key in ("kcal", "protein_g", "carbs_g", "fat_g", "bmr", "activity_factor"):
+        if override.get(key) is not None:
+            try:
+                out[key] = int(round(float(override[key])))
+                if key == "kcal":
+                    used_specialist_kcal = True
+            except (TypeError, ValueError):
+                pass
+    if override.get("goal"):
+        out["goal"] = str(override["goal"])
+    if override.get("maintenance_kcal") is not None:
+        try:
+            out["maintenance_kcal"] = int(round(float(override["maintenance_kcal"])))
+        except (TypeError, ValueError):
+            pass
+    if override.get("method"):
+        out["method"] = str(override["method"])
+    elif used_specialist_kcal:
+        out["method"] = "Specialist-selected goal (dashboard)"
+    out["target_source"] = "specialist_dashboard" if used_specialist_kcal else "computed"
+    return out
+
+
+def _normalize_legacy_meal_keys(matrix: dict) -> dict:
+    """Map legacy 'Morning Snack' slot to 'Snack'."""
+    if not isinstance(matrix, dict):
+        return matrix
+    for day_obj in matrix.values():
+        if not isinstance(day_obj, dict):
+            continue
+        if LEGACY_SNACK_KEY in day_obj:
+            if "Snack" not in day_obj:
+                day_obj["Snack"] = day_obj.pop(LEGACY_SNACK_KEY)
+            else:
+                del day_obj[LEGACY_SNACK_KEY]
+    return matrix
+
+
+def _is_compound_food_name(name: str) -> bool:
+    n = str(name or "").strip()
+    if not n:
+        return True
+    return bool(_COMPOUND_FOOD_RE.search(n))
+
+
 def _compact_patient_context_for_llm(patient_ctx: str, max_chars: int) -> str:
     """Drop decorative === banners; keep section labels and clinical facts (smaller prompts)."""
     lines_out: list[str] = []
@@ -355,13 +423,19 @@ def _build_batch_prompt(
         else "1. Choose whole foods appropriate to the patient's condition, allergies, and restrictions (no fixed food list in this run)."
     )
 
+    tdee_label = (
+        "SPECIALIST-SELECTED DAILY GOAL"
+        if tdee.get("target_source") == "specialist_dashboard"
+        else "COMPUTED DAILY TARGETS"
+    )
+
     return f"""You are a clinical nutrition expert. Build a partial weekly diet matrix.
 
 {patient_compact}
 
 {nutrition_compact}
 
-COMPUTED DAILY TARGETS (from Python — design each day to approximate these totals):
+{tdee_label} (design each day to approximate these totals):
 - Energy (TDEE): {kcal} kcal/day (acceptable band ±{int(round(KCAL_TOLERANCE))} kcal: {max(0, int(kcal - KCAL_TOLERANCE))}–{int(kcal + KCAL_TOLERANCE)})
 - Protein: ~{protein_g} g/day | Carbs: ~{carbs_g} g/day | Fat: ~{fat_g} g/day
 Distribute protein, carbs, and fat across the four meals in a balanced way; sum meal kcals to the TDEE band.
@@ -381,19 +455,21 @@ Output must be a single valid JSON object with no text before or after.
 CRITICAL RULES:
 {rule1}
 2. Respect ALL allergies and restrictions in patient context.
-3. Each listed day MUST have exactly 4 meals: Breakfast, Morning Snack, Lunch, Dinner.
-4. Each meal MUST list foods with fields: name, portion_g, kcal, protein_g, carbs_g, fat_g.
-5. Each day MUST include day_total_kcal (sum of meal_kcal).
-6. Vary meals vs adjacent days in your batch where applicable.
+3. Each listed day MUST have exactly 4 meals: Breakfast, Lunch, Dinner, Snack.
+4. Each meal MUST list exactly ONE single food in foods[] — no recipes, no multi-ingredient names.
+5. Each food MUST include portion_g (grams) and kcal, protein_g, carbs_g, fat_g scaled to that portion.
+6. Within each day, all four food names must be unique (no repeats on the same day).
+7. Each day MUST include day_total_kcal (sum of meal_kcal).
+8. Vary meals vs adjacent days in your batch where applicable.
 
 Return JSON with this shape (only for the days you were assigned; fill those days completely):
 {{
   "matrix": {{
     "{days[0]}": {{
-      "Breakfast": {{"foods": [{{"name": "...", "portion_g": 0, "kcal": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0}}], "meal_kcal": 0}},
-      "Morning Snack": {{"foods": [], "meal_kcal": 0}},
-      "Lunch": {{"foods": [], "meal_kcal": 0}},
+      "Breakfast": {{"foods": [{{"name": "Oats", "portion_g": 80, "kcal": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0}}], "meal_kcal": 0}},
+      "Lunch": {{"foods": [{{"name": "Chicken Breast", "portion_g": 150, "kcal": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0}}], "meal_kcal": 0}},
       "Dinner": {{"foods": [], "meal_kcal": 0}},
+      "Snack": {{"foods": [], "meal_kcal": 0}},
       "day_total_kcal": 0
     }}
   }},
@@ -758,32 +834,45 @@ def _validate_day_kcal_tolerance(matrix: dict, target_kcal: float, tol: float) -
             )
 
 
-def _validate_no_consecutive_duplicate_days(matrix: dict) -> None:
-    def day_signature(day_key: str):
-        parts = []
-        for meal in MEALS:
-            foods = matrix[day_key][meal].get("foods") or []
-            names = tuple(
-                sorted(
-                    (_normalize_food_item(f).get("name", "").lower() for f in foods),
-                )
-            )
-            parts.append(names)
-        return tuple(parts)
-
-    sigs = [day_signature(d) for d in DAYS]
-    for i in range(len(DAYS) - 1):
-        if sigs[i] != sigs[i + 1]:
+def _validate_one_food_per_meal(matrix: dict) -> None:
+    """Each meal slot: exactly one single, non-compound food."""
+    for day in DAYS:
+        if day not in matrix:
             continue
-        has_food = any(
-            any(name for name in meal_names)
-            for meal_names in sigs[i]
-        )
-        if has_food:
-            raise ValueError(
-                f"{DAYS[i]} and {DAYS[i + 1]} have identical meals — vary "
-                "consecutive days.",
-            )
+        for meal in MEALS:
+            foods = matrix[day][meal].get("foods") or []
+            if len(foods) != 1:
+                raise ValueError(
+                    f"{day}/{meal}: exactly one food item required — got {len(foods)}.",
+                )
+            name = _normalize_food_item(foods[0]).get("name", "")
+            if _is_compound_food_name(name):
+                raise ValueError(
+                    f"{day}/{meal}: use a single food name, not a compound dish: {name!r}",
+                )
+            portion = float(_normalize_food_item(foods[0]).get("portion_g", 0) or 0)
+            if portion <= 0:
+                raise ValueError(
+                    f"{day}/{meal}: portion_g must be positive grams for {name!r}.",
+                )
+
+
+def _validate_daily_food_uniqueness(matrix: dict) -> None:
+    """No food name repeated within the same calendar day."""
+    for day in DAYS:
+        if day not in matrix:
+            continue
+        seen: set[str] = set()
+        for meal in MEALS:
+            for f in matrix[day][meal].get("foods") or []:
+                name = _normalize_food_item(f).get("name", "").strip().lower()
+                if not name:
+                    continue
+                if name in seen:
+                    raise ValueError(
+                        f"{day}: food {name!r} appears more than once on the same day.",
+                    )
+                seen.add(name)
 
 
 def _extract_allergen_terms(patient_ctx: str) -> list[str]:
@@ -853,6 +942,8 @@ def _validate_matrix_keys(
     if not isinstance(matrix, dict):
         raise ValueError("'matrix' must be an object.")
 
+    matrix = _normalize_legacy_meal_keys(matrix)
+
     for day in DAYS:
         if day not in matrix:
             raise ValueError(f"Missing calendar day '{day}' in matrix.")
@@ -865,7 +956,8 @@ def _validate_matrix_keys(
         _snap_matrix_to_tdee(matrix, float(python_tdee["kcal"]), KCAL_TOLERANCE)
         matrix = _normalize_matrix_in_place(matrix)
     _validate_day_kcal_tolerance(matrix, python_tdee["kcal"], KCAL_TOLERANCE)
-    _validate_no_consecutive_duplicate_days(matrix)
+    _validate_one_food_per_meal(matrix)
+    _validate_daily_food_uniqueness(matrix)
     _validate_allergens_and_restrictions(patient_ctx, matrix)
 
     clinical_notes = matrix_data.get("clinical_notes") or ""
@@ -882,7 +974,9 @@ def _validate_matrix_keys(
     }
 
 
-async def generateNutritionMatrix(patientId: int) -> dict:
+async def generateNutritionMatrix(
+    patientId: int, target_macros: dict | None = None
+) -> dict:
     logger.info(f"[RAG] Step 1: MySQL clinical summary for patient id={patientId}")
     patient_ctx = await timed_coro(
         "matrix_mysql_patient_context",
@@ -928,10 +1022,11 @@ async def generateNutritionMatrix(patientId: int) -> dict:
                 "[RAG] No similar patient context available (db_pacienti may be empty).",
             )
 
-    tdee = _calculate_tdee(patient_ctx)
+    tdee = _resolve_tdee(patient_ctx, target_macros)
     logger.info(
         f"[RAG] Step 4 TDEE: {tdee['kcal']} kcal | P:{tdee['protein_g']}g "
-        f"C:{tdee['carbs_g']}g F:{tdee['fat_g']}g | BMR {tdee.get('bmr')}",
+        f"C:{tdee['carbs_g']}g F:{tdee['fat_g']}g | BMR {tdee.get('bmr')} | "
+        f"source={tdee.get('target_source', 'computed')}",
     )
 
     logger.info(
@@ -990,13 +1085,15 @@ async def generateNutritionMatrix(patientId: int) -> dict:
 #     finally:
 #         loop.close()
 
-def generate_nutrition_matrix_sync(patient_id: int) -> dict:
+def generate_nutrition_matrix_sync(
+    patient_id: int, target_macros: dict | None = None
+) -> dict:
     loop = asyncio.new_event_loop()
     try:
         coro = (
-            generateNutritionMatrixSimple(patient_id)
+            generateNutritionMatrixSimple(patient_id, target_macros=target_macros)
             if MATRIX_SIMPLE_MODE
-            else generateNutritionMatrix(patient_id)
+            else generateNutritionMatrix(patient_id, target_macros=target_macros)
         )
         return loop.run_until_complete(coro)
     finally:

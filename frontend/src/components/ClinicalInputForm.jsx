@@ -1,5 +1,7 @@
 import { useState } from "react";
 
+import TdeeTargetPanel from "./TdeeTargetPanel.jsx";
+
 /* ── tiny icon ──────────────────────────────────────────────────────────── */
 function Icon({ d, size = 15, stroke = "#6366f1", sw = 2.2 }) {
   return (
@@ -119,6 +121,9 @@ export default function ClinicalInputForm({
   submit,
   busy,
   error,
+  tdeeGoal,
+  setTdeeGoal,
+  onTdeeTargetsChange,
 }) {
   const d = dashboardData;
   const set = (patch) => setDashboardData((prev) => ({ ...prev, ...patch }));
@@ -207,6 +212,9 @@ export default function ClinicalInputForm({
             >
               <Icon d={ICONS.check} size={14} stroke="#22c55e" sw={2.5} />
               Record #{d.selectedRecordId} selected
+              {(d.plan?.plan?.meal_matrix?.weekly ||
+                d.plan?.meal_matrix?.weekly) &&
+                " · meal plan loaded"}
             </div>
           )}
         </div>
@@ -411,6 +419,13 @@ export default function ClinicalInputForm({
               />
             </div>
           </Section>
+
+          <TdeeTargetPanel
+            patientView={d.patientView}
+            tdeeGoal={tdeeGoal}
+            setTdeeGoal={setTdeeGoal}
+            onTargetsChange={onTdeeTargetsChange}
+          />
         </div>
 
         {/* Submit bar */}

@@ -89,8 +89,12 @@ async function getMatrixJobStatus(jobId) {
 /**
  * Start matrix generation
  */
-async function requestMatrix(patientId) {
+async function requestMatrix(patientId, opts = {}) {
   const url = `${baseUrl()}/generate-matrix`;
+  const body = { patientId: Number(patientId) };
+  if (opts.target_macros != null) {
+    body.targetMacros = opts.target_macros;
+  }
 
   const resp = await fetchWithTimeout(
     url,
@@ -100,7 +104,7 @@ async function requestMatrix(patientId) {
         accept: "application/json",
         "content-type": "application/json",
       },
-      body: JSON.stringify({ patientId: Number(patientId) }),
+      body: JSON.stringify(body),
     },
     REQUEST_TIMEOUT_MS,
   );
@@ -213,8 +217,9 @@ async function pollMatrix(jobId, options = {}) {
  */
 async function generateMatrix(patientId, pollOptions = {}) {
   try {
-    const { jobId } = await requestMatrix(patientId);
-    return await pollMatrix(jobId, pollOptions);
+    const { target_macros, ...pollOpts } = pollOptions;
+    const { jobId } = await requestMatrix(patientId, { target_macros });
+    return await pollMatrix(jobId, pollOpts);
   } catch (err) {
     console.error("[AI] generateMatrix failed:", err.message);
     throw err; // lăsăm caller să decidă fallback

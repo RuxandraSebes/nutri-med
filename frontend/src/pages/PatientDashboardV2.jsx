@@ -280,19 +280,29 @@ function MealTimelineRow({ meal, index }) {
 
 // ─── Weekly matrix day card ───────────────────────────────────────────────────
 function DayCard({ day, dayData }) {
-  const MEALS = ["Breakfast", "Morning Snack", "Lunch", "Dinner"];
+  const MEALS = ["Breakfast", "Lunch", "Dinner", "Snack"];
   const MEAL_TIMES = {
     Breakfast: "08:00",
-    "Morning Snack": "10:30",
     Lunch: "13:00",
     Dinner: "19:00",
+    Snack: "15:30",
+    "Morning Snack": "15:30",
   };
   const mealColors = {
     Breakfast: "#6366f1",
+    Snack: "#0ea5e9",
     "Morning Snack": "#0ea5e9",
     Lunch: "#10b981",
     Dinner: "#f59e0b",
   };
+
+  function mealBlock(meal) {
+    if (dayData?.[meal]) return dayData[meal];
+    if (meal === "Snack" && dayData?.["Morning Snack"]) {
+      return dayData["Morning Snack"];
+    }
+    return null;
+  }
 
   return (
     <div className="pd-day-card">
@@ -304,7 +314,7 @@ function DayCard({ day, dayData }) {
       </div>
       <div className="pd-day-meals">
         {MEALS.map((meal) => {
-          const block = dayData?.[meal];
+          const block = mealBlock(meal);
           const foods = block?.foods || [];
           const color = mealColors[meal];
           return (
@@ -443,22 +453,6 @@ function EmptyState({ icon, title, subtitle }) {
   );
 }
 
-// ─── AI content block ─────────────────────────────────────────────────────────
-function AiBlock({ label, icon, content, accentColor = "#10b981" }) {
-  if (!content) return null;
-  return (
-    <div className="pd-ai-block" style={{ borderLeftColor: accentColor }}>
-      <div className="pd-ai-label" style={{ color: accentColor }}>
-        <Icon d={icon} size={13} />
-        {label}
-      </div>
-      <div className="pd-ai-content">
-        <MarkdownContent content={content} />
-      </div>
-    </div>
-  );
-}
-
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 const TABS = [
   { id: "today", label: "Today", icon: Icons.home },
@@ -542,7 +536,6 @@ export default function PatientDashboardV2() {
 
   const weekly = plan?.meal_matrix?.weekly ?? plan?.plan?.meal_matrix?.weekly;
   const meals = plan?.meal_matrix?.meals ?? plan?.plan?.meal_matrix?.meals;
-  const llm = plan?.llm_outputs ?? plan?.plan?.llm_outputs;
   const shoppingList = plan?.shopping_list ?? plan?.plan?.shopping_list;
   const targetMacros = plan?.target_macros ?? plan?.plan?.target_macros;
   const clinicalStrategy =
@@ -724,36 +717,6 @@ export default function PatientDashboardV2() {
             />
           ) : (
             <>
-              {/* LLM outputs */}
-              {llm && (
-                <section className="pd-section">
-                  <div className="pd-section-header">
-                    <Icon d={Icons.leaf} size={16} stroke="#10b981" />
-                    <h2 className="pd-section-title">Nutritional guidance</h2>
-                  </div>
-                  <div className="pd-ai-blocks">
-                    <AiBlock
-                      label="Diet rules & priorities"
-                      icon={Icons.bolt}
-                      content={llm.clinical_logic}
-                      accentColor="#6366f1"
-                    />
-                    <AiBlock
-                      label="Meal ideas"
-                      icon={Icons.flame}
-                      content={llm.culinary_creative}
-                      accentColor="#10b981"
-                    />
-                    <AiBlock
-                      label="Reference guidance"
-                      icon={Icons.note}
-                      content={llm.rag_retrieval}
-                      accentColor="#0ea5e9"
-                    />
-                  </div>
-                </section>
-              )}
-
               {/* Flat meals timeline */}
               {meals?.length > 0 && (
                 <section className="pd-section">

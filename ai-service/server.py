@@ -111,11 +111,11 @@ QA_PROMPT = PromptTemplate(
 )
 
 
-def _run_matrix_job(job_id: str, patient_id: int) -> None:
+def _run_matrix_job(job_id: str, patient_id: int, target_macros: dict | None = None) -> None:
     JOBS[job_id]["status"] = "running"
     JOBS[job_id]["error"] = None
     try:
-        result = generate_nutrition_matrix_sync(patient_id)
+        result = generate_nutrition_matrix_sync(patient_id, target_macros=target_macros)
         JOBS[job_id]["status"] = "done"
         JOBS[job_id]["result"] = result
     except Exception as e:
@@ -276,6 +276,10 @@ def generate_matrix():
     except (TypeError, ValueError):
         return jsonify({"error": "'patientId' must be an integer"}), 400
 
+    target_macros = data.get("targetMacros") or data.get("target_macros")
+    if target_macros is not None and not isinstance(target_macros, dict):
+        return jsonify({"error": "'targetMacros' must be an object"}), 400
+
     if not MATRIX_SKIP_RAG and db_nutritie is None:
         return (
             jsonify(
@@ -298,7 +302,7 @@ def generate_matrix():
 
     t = threading.Thread(
         target=_run_matrix_job,
-        args=(job_id, patient_id),
+        args=(job_id, patient_id, target_macros),
         daemon=True,
     )
     t.start()
