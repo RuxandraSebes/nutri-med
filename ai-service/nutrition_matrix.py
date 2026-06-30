@@ -26,6 +26,7 @@ from typing import Optional
 from langchain_ollama import ChatOllama
 from pipeline_timing import timed_coro
 from rag_service import getPatientContext, getNutritionalContext, getSimilarPatientsContext
+from portion_rules import apply_portion_rules_to_food, apply_portion_rules_to_matrix
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,7 @@ RULES:
 2. Each day has exactly 4 meals: Breakfast, Lunch, Dinner, Snack.
 3. Each meal lists exactly ONE single whole food in foods[] — no recipes, no multi-ingredient dishes, no compound names (no "and", "+", commas in name).
 4. Each food entry: name (single item), portion_g (grams), kcal, protein_g, carbs_g, fat_g — scale macros to portion_g.
+4b. Use practical portion steps: eggs in 50g increments (≈1 egg), meats in 10g steps, grains/carbs in 5g steps — never fractional grams like 3.5g.
 5. Within each day, all four food names must be different (no repeats on the same day).
 6. meal_kcal = ingredient kcal; day_total_kcal = sum of four meals.
 7. Respect ALL allergies and restrictions in patient context.
@@ -458,6 +460,7 @@ CRITICAL RULES:
 3. Each listed day MUST have exactly 4 meals: Breakfast, Lunch, Dinner, Snack.
 4. Each meal MUST list exactly ONE single food in foods[] — no recipes, no multi-ingredient names.
 5. Each food MUST include portion_g (grams) and kcal, protein_g, carbs_g, fat_g scaled to that portion.
+5b. Round portion_g: meats 10g, grains/carbs/vegetables 5g, eggs 50g minimum step.
 6. Within each day, all four food names must be unique (no repeats on the same day).
 7. Each day MUST include day_total_kcal (sum of meal_kcal).
 8. Vary meals vs adjacent days in your batch where applicable.
@@ -783,6 +786,7 @@ def _snap_matrix_to_tdee(matrix: dict, target_kcal: float, tol: float) -> None:
                 f["carbs_g"] = round(float(fi.get("carbs_g", 0) or 0) * factor, 2)
                 f["fat_g"] = round(float(fi.get("fat_g", 0) or 0) * factor, 2)
                 f["portion_g"] = round(float(fi.get("portion_g", 0) or 0) * factor, 2)
+                apply_portion_rules_to_food(f)
             mk = sum(
                 float(_normalize_food_item(x).get("kcal", 0) or 0)
                 for x in blk.get("foods") or []
@@ -811,6 +815,8 @@ def _normalize_matrix_in_place(matrix: dict) -> dict:
             if not isinstance(foods_raw, list):
                 raise ValueError(f"foods must be a list for {day}/{meal}")
             blk["foods"] = [_normalize_food_item(x) for x in foods_raw]
+            for f in blk["foods"]:
+                apply_portion_rules_to_food(f)
             mk = blk.get("meal_kcal")
             if mk is None:
                 mk = sum(float(x.get("kcal", 0) or 0) for x in blk["foods"])
@@ -959,6 +965,8 @@ def _validate_matrix_keys(
     _validate_one_food_per_meal(matrix)
     _validate_daily_food_uniqueness(matrix)
     _validate_allergens_and_restrictions(patient_ctx, matrix)
+
+    apply_portion_rules_to_matrix(matrix, MEALS, DAYS)
 
     clinical_notes = matrix_data.get("clinical_notes") or ""
     foods_used = _merge_foods_used(matrix_data.get("foods_used"), matrix)

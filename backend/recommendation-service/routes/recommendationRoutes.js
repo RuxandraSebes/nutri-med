@@ -46,4 +46,16 @@ router.patch(
   recommendationController.approvePlan,
 );
 
+router.post(
+  "/patients/:patientId/plan/ingredient-swaps",
+  requireAuth("patient"),
+  recommendationController.suggestIngredientSwaps,
+);
+
+router.post(
+  "/patients/:patientId/plan/ingredient-swap",
+  requireAuth("patient"),
+  recommendationController.applyIngredientSwap,
+);
+
 module.exports = router;

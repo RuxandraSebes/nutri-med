@@ -8,6 +8,7 @@ Endpoints:
   GET  /matrix-status/<job_id> → poll job result
 """
 
+import asyncio
 import json as json_lib
 import logging
 import os
@@ -334,6 +335,68 @@ def matrix_status(job_id: str):
     if st == "error":
         out["error"] = job.get("error") or "Unknown error"
     return _no_store_json(out)
+
+
+@app.route("/suggest-ingredient-swaps", methods=["POST"])
+def suggest_ingredient_swaps_route():
+    """POST { patientId, oldName } → 3 LLM swap alternatives."""
+    data = request.json or {}
+    patient_id = data.get("patientId")
+    old_name = data.get("oldName") or data.get("old_name")
+
+    if patient_id is None:
+        return jsonify({"error": "Missing 'patientId'"}), 400
+    if not old_name or not str(old_name).strip():
+        return jsonify({"error": "Missing 'oldName'"}), 400
+
+    try:
+        patient_id = int(patient_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "'patientId' must be an integer"}), 400
+
+    try:
+        from ingredient_swap import suggest_ingredient_swaps
+
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(
+                suggest_ingredient_swaps(patient_id, str(old_name).strip()),
+            )
+        finally:
+            loop.close()
+        return jsonify(result)
+    except Exception as e:
+        logger.exception("[/suggest-ingredient-swaps] failed: %s", e)
+        return jsonify({"error": str(e)}), 422
+
+
+@app.route("/apply-ingredient-swap", methods=["POST"])
+def apply_ingredient_swap_route():
+    """POST { mealMatrix, oldName, replacement } → updated meal_matrix."""
+    data = request.json or {}
+    meal_matrix = data.get("mealMatrix") or data.get("meal_matrix")
+    old_name = data.get("oldName") or data.get("old_name")
+    replacement = data.get("replacement") or data.get("newFood")
+
+    if not meal_matrix or not isinstance(meal_matrix, dict):
+        return jsonify({"error": "Missing 'mealMatrix'"}), 400
+    if not old_name:
+        return jsonify({"error": "Missing 'oldName'"}), 400
+    if not replacement or not isinstance(replacement, dict):
+        return jsonify({"error": "Missing 'replacement' object"}), 400
+
+    try:
+        from ingredient_swap import apply_swap_to_meal_matrix
+
+        updated = apply_swap_to_meal_matrix(
+            meal_matrix, str(old_name).strip(), replacement,
+        )
+        return jsonify({"success": True, "meal_matrix": updated})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.exception("[/apply-ingredient-swap] failed: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

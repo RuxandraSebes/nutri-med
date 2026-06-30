@@ -159,6 +159,56 @@ async function discardDraft(req, res, next) {
   }
 }
 
+async function suggestIngredientSwaps(req, res, next) {
+  try {
+    const patientId = Number(req.params.patientId);
+    if (!Number.isFinite(patientId)) {
+      return res.status(400).json({ error: "Invalid patientId" });
+    }
+    await recommendationService.assertCanAccessPatientPlan(
+      req.auth,
+      patientId,
+    );
+    const oldName = req.body?.oldName ?? req.body?.old_name;
+    const result = await recommendationService.suggestPlanIngredientSwaps(
+      patientId,
+      oldName,
+    );
+    res.json(result);
+  } catch (e) {
+    if (e && typeof e.status === "number") {
+      return res.status(e.status).json({ error: e.message || "Request failed" });
+    }
+    next(e);
+  }
+}
+
+async function applyIngredientSwap(req, res, next) {
+  try {
+    const patientId = Number(req.params.patientId);
+    if (!Number.isFinite(patientId)) {
+      return res.status(400).json({ error: "Invalid patientId" });
+    }
+    await recommendationService.assertCanAccessPatientPlan(
+      req.auth,
+      patientId,
+    );
+    const oldName = req.body?.oldName ?? req.body?.old_name;
+    const replacement = req.body?.replacement ?? req.body?.newFood;
+    const updated = await recommendationService.applyPlanIngredientSwap(
+      patientId,
+      oldName,
+      replacement,
+    );
+    res.json(updated);
+  } catch (e) {
+    if (e && typeof e.status === "number") {
+      return res.status(e.status).json({ error: e.message || "Request failed" });
+    }
+    next(e);
+  }
+}
+
 module.exports = {
   generatePlan,
   completePlan,
@@ -167,4 +217,6 @@ module.exports = {
   updateDraft,
   regeneratePlan,
   discardDraft,
+  suggestIngredientSwaps,
+  applyIngredientSwap,
 };

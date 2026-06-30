@@ -64,5 +64,15 @@ export const recommendationApi = {
       method: "PATCH",
       body: payload || {},
     }),
+  suggestIngredientSwaps: (patientId, payload) =>
+    baseFetch(
+      `/api/recommendations/patients/${patientId}/plan/ingredient-swaps`,
+      { method: "POST", body: payload || {} },
+    ),
+  applyIngredientSwap: (patientId, payload) =>
+    baseFetch(
+      `/api/recommendations/patients/${patientId}/plan/ingredient-swap`,
+      { method: "POST", body: payload || {} },
+    ),
 };
 

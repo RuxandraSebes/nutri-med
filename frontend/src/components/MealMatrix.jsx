@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { roundPortionG } from "../utils/portionRules.js";
 
 /* ── Icon helper ────────────────────────────────────────────────────────── */
 function Icon({ d, size = 15, stroke = "currentColor", sw = 2 }) {
@@ -26,7 +27,6 @@ const I = {
   regen:
     "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   trash: "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
-  bolt: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
 };
 
 const DAYS = [
@@ -175,6 +175,12 @@ function FoodRow({ day, meal, index, food, onPatchFood }) {
             onChange={(e) =>
               onPatchFood(day, meal, index, "portion_g", e.target.value)
             }
+            onBlur={(e) => {
+              const rounded = roundPortionG(food.name, e.target.value);
+              if (rounded && rounded !== Number(food.portion_g)) {
+                onPatchFood(day, meal, index, "portion_g", String(rounded));
+              }
+            }}
           />
         </div>
         <div>

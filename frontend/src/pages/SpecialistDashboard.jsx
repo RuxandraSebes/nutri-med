@@ -75,8 +75,7 @@ function MatrixGenerationBanner({ elapsedSec }) {
         <div className="sd-gen-bar-fill" style={{ width: `${pct}%` }} />
       </div>
       <div className="sd-gen-label">
-        Generating meal matrix… {elapsedSec}s elapsed — this usually takes
-        60–120 s
+        Generating meal matrix… {elapsedSec}s elapsed
       </div>
     </div>
   );
@@ -371,18 +370,24 @@ export default function SpecialistDashboard() {
   useEffect(() => {
     const rid = dashboardData.selectedRecordId;
     if (!rid) {
-      setDashboardData((d) => ({ ...d, patientView: null, plan: null, result: null }));
+      setDashboardData((d) => ({
+        ...d,
+        patientView: null,
+        plan: null,
+        result: null,
+      }));
       setPlanLoading(false);
       return;
     }
     let cancelled = false;
     setPlanLoading(true);
     (async () => {
-      const [patientRes, specialistRes, latestPlanRes] = await Promise.allSettled([
-        patientApi.getForSpecialist(rid),
-        medicalApi.getSpecialistObject(rid),
-        recommendationApi.getLatestPlan(rid),
-      ]);
+      const [patientRes, specialistRes, latestPlanRes] =
+        await Promise.allSettled([
+          patientApi.getForSpecialist(rid),
+          medicalApi.getSpecialistObject(rid),
+          recommendationApi.getLatestPlan(rid),
+        ]);
       if (cancelled) return;
 
       const patientView =
@@ -417,9 +422,7 @@ export default function SpecialistDashboard() {
         plan: latestPlan,
         result: specialistObject,
         primaryDisease:
-          specialistObject?.primary_disease ??
-          specialistObject?.icd10 ??
-          "",
+          specialistObject?.primary_disease ?? specialistObject?.icd10 ?? "",
         severity: specialistObject?.severity ?? "Moderate",
         comorbiditiesText: Array.isArray(specialistObject?.comorbidities)
           ? specialistObject.comorbidities.join("\n")
@@ -430,7 +433,9 @@ export default function SpecialistDashboard() {
         systolic:
           biomarkers?.systolic_bp != null ? String(biomarkers.systolic_bp) : "",
         diastolic:
-          biomarkers?.diastolic_bp != null ? String(biomarkers.diastolic_bp) : "",
+          biomarkers?.diastolic_bp != null
+            ? String(biomarkers.diastolic_bp)
+            : "",
         glucose: biomarkers?.glucose != null ? String(biomarkers.glucose) : "",
         cholesterol:
           biomarkers?.cholesterol != null ? String(biomarkers.cholesterol) : "",
@@ -442,9 +447,12 @@ export default function SpecialistDashboard() {
           (body?.body_water_percentage ?? body?.water_pct) != null
             ? String(body?.body_water_percentage ?? body?.water_pct)
             : "",
-        muscleKg: body?.muscle_mass_kg != null ? String(body.muscle_mass_kg) : "",
+        muscleKg:
+          body?.muscle_mass_kg != null ? String(body.muscle_mass_kg) : "",
         visceral:
-          body?.visceral_fat_level != null ? String(body.visceral_fat_level) : "",
+          body?.visceral_fat_level != null
+            ? String(body.visceral_fat_level)
+            : "",
         metabolicAge:
           body?.metabolic_age != null ? String(body.metabolic_age) : "",
         allergiesText: allergyValues.join("\n"),
@@ -601,8 +609,7 @@ export default function SpecialistDashboard() {
         clinical_strategy: plan.plan.clinical_strategy,
         meal_matrix: plan.plan.meal_matrix,
         shopping_list: plan.plan.shopping_list,
-        target_macros:
-          activeTdeeTargetsRef.current ?? plan.plan.target_macros,
+        target_macros: activeTdeeTargetsRef.current ?? plan.plan.target_macros,
       });
       const refreshed = await recommendationApi.getLatestPlan(selectedRecordId);
       setDashboardData((d) => ({
@@ -779,48 +786,50 @@ export default function SpecialistDashboard() {
             </div>
           ) : (
             <>
-          <MealMatrix
-            dashboardData={dashboardData}
-            setDashboardData={setDashboardData}
-            selectedRecordId={dashboardData.selectedRecordId}
-            patientLabel={dashboardData.patientView?.patient_id || "Patient"}
-            onApprove={approvePlanFromDashboard}
-            onDecision={(decision) =>
-              setDashboardData((d) => ({ ...d, decision }))
-            }
-            onApproveError={(e) => {
-              const details = e?.data?.details;
-              const msg =
-                details?.errors?.join?.("\n") ||
-                e.message ||
-                "Approval blocked";
-              setApproveSafetyError(msg);
-            }}
-            planActionBusy={planActionBusy}
-            planActionMsg={planActionMsg}
-            saveDraftToServer={saveDraftToServer}
-            regenerateDraft={regenerateDraft}
-            discardDraft={discardDraft}
-          />
+              <MealMatrix
+                dashboardData={dashboardData}
+                setDashboardData={setDashboardData}
+                selectedRecordId={dashboardData.selectedRecordId}
+                patientLabel={
+                  dashboardData.patientView?.patient_id || "Patient"
+                }
+                onApprove={approvePlanFromDashboard}
+                onDecision={(decision) =>
+                  setDashboardData((d) => ({ ...d, decision }))
+                }
+                onApproveError={(e) => {
+                  const details = e?.data?.details;
+                  const msg =
+                    details?.errors?.join?.("\n") ||
+                    e.message ||
+                    "Approval blocked";
+                  setApproveSafetyError(msg);
+                }}
+                planActionBusy={planActionBusy}
+                planActionMsg={planActionMsg}
+                saveDraftToServer={saveDraftToServer}
+                regenerateDraft={regenerateDraft}
+                discardDraft={discardDraft}
+              />
 
-          {dashboardData.decision && (
-            <div
-              className={`sd-alert sd-decision-follow ${
-                dashboardData.decision === "approve"
-                  ? "sd-alert-success"
-                  : dashboardData.decision === "reject"
-                    ? "sd-alert-error"
-                    : "sd-alert-info"
-              }`}
-            >
-              <Icon d={I.check} size={15} />
-              {dashboardData.decision === "approve"
-                ? "Plan approved and published."
-                : dashboardData.decision === "reject"
-                  ? "Plan rejected."
-                  : "Plan flagged for modification."}
-            </div>
-          )}
+              {dashboardData.decision && (
+                <div
+                  className={`sd-alert sd-decision-follow ${
+                    dashboardData.decision === "approve"
+                      ? "sd-alert-success"
+                      : dashboardData.decision === "reject"
+                        ? "sd-alert-error"
+                        : "sd-alert-info"
+                  }`}
+                >
+                  <Icon d={I.check} size={15} />
+                  {dashboardData.decision === "approve"
+                    ? "Plan approved and published."
+                    : dashboardData.decision === "reject"
+                      ? "Plan rejected."
+                      : "Plan flagged for modification."}
+                </div>
+              )}
             </>
           )}
         </div>

@@ -6,6 +6,8 @@ const {
   generateMatrix,
   requestMatrix,
   getMatrixJobStatus,
+  suggestIngredientSwaps,
+  applyIngredientSwap,
 } = require("../src/aiClient");
 
 const PATIENT_SERVICE_URL =
@@ -411,6 +413,61 @@ async function discardDraftPlan(patientId) {
   return { discarded: n };
 }
 
+async function suggestPlanIngredientSwaps(patientId, oldName) {
+  const row = await dietPlanRepository.getLatestPlanRow(patientId);
+  if (!row) {
+    const err = new Error("No plan found");
+    err.status = 404;
+    throw err;
+  }
+  if (row.status !== "approved") {
+    const err = new Error("Ingredient swaps are available only on approved plans");
+    err.status = 409;
+    throw err;
+  }
+  if (!oldName || !String(oldName).trim()) {
+    const err = new Error("Missing oldName");
+    err.status = 400;
+    throw err;
+  }
+  return suggestIngredientSwaps(patientId, String(oldName).trim());
+}
+
+async function applyPlanIngredientSwap(patientId, oldName, replacement) {
+  const row = await dietPlanRepository.getLatestPlanRow(patientId);
+  if (!row) {
+    const err = new Error("No plan found");
+    err.status = 404;
+    throw err;
+  }
+  if (row.status !== "approved") {
+    const err = new Error("Only an approved plan can be updated with ingredient swaps");
+    err.status = 409;
+    throw err;
+  }
+  if (!oldName || !String(oldName).trim()) {
+    const err = new Error("Missing oldName");
+    err.status = 400;
+    throw err;
+  }
+  if (!replacement || typeof replacement !== "object") {
+    const err = new Error("Missing replacement");
+    err.status = 400;
+    throw err;
+  }
+
+  const result = await applyIngredientSwap(
+    row.meal_matrix,
+    String(oldName).trim(),
+    replacement,
+  );
+  const meal_matrix = result.meal_matrix;
+  const shopping_list = consolidateShoppingList(meal_matrix);
+
+  await row.update({ meal_matrix, shopping_list });
+  return rowToApi(await row.reload());
+}
+
 module.exports = {
   assembleOrchestratorInput,
   startPlanGeneration,
@@ -420,5 +477,7 @@ module.exports = {
   approveLatestPlan,
   updateDraftPlan,
   discardDraftPlan,
+  suggestPlanIngredientSwaps,
+  applyPlanIngredientSwap,
   assertCanAccessPatientPlan,
 };

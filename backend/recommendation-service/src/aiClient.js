@@ -10,8 +10,12 @@
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai-service:5001";
 
 // Timeouts
-const REQUEST_TIMEOUT_MS = 20000; // POST
+const REQUEST_TIMEOUT_MS = 20000; // POST (matrix job start)
 const POLL_REQUEST_TIMEOUT_MS = 60000; // GET status
+/** Ollama swap suggestions often take 60–120s on CPU; matrix POST stays at 20s. */
+const SWAP_REQUEST_TIMEOUT_MS = Number(
+  process.env.AI_SWAP_REQUEST_TIMEOUT_MS || 180000,
+);
 
 // Polling behavior
 const DEFAULT_INTERVAL_MS = 8000;
@@ -41,6 +45,12 @@ async function fetchWithTimeout(
       signal: controller.signal,
     });
   } catch (err) {
+    if (err && err.name === "AbortError") {
+      const e = new Error(`Request timed out after ${timeoutMs}ms`);
+      e.status = 504;
+      e.code = "TIMEOUT";
+      throw e;
+    }
     throw new Error(`Fetch failed: ${err.message}`);
   } finally {
     clearTimeout(tid);
@@ -226,9 +236,68 @@ async function generateMatrix(patientId, pollOptions = {}) {
   }
 }
 
+async function suggestIngredientSwaps(patientId, oldName) {
+  const url = `${baseUrl()}/suggest-ingredient-swaps`;
+  const resp = await fetchWithTimeout(
+    url,
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        patientId: Number(patientId),
+        oldName: String(oldName),
+      }),
+    },
+    SWAP_REQUEST_TIMEOUT_MS,
+  );
+  const data = await safeParseJSON(resp);
+  if (!resp.ok) {
+    const err = new Error(
+      data?.error || `suggest-ingredient-swaps HTTP ${resp.status}`,
+    );
+    err.status = resp.status;
+    throw err;
+  }
+  return data;
+}
+
+async function applyIngredientSwap(mealMatrix, oldName, replacement) {
+  const url = `${baseUrl()}/apply-ingredient-swap`;
+  const resp = await fetchWithTimeout(
+    url,
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mealMatrix,
+        oldName: String(oldName),
+        replacement,
+      }),
+    },
+    SWAP_REQUEST_TIMEOUT_MS,
+  );
+  const data = await safeParseJSON(resp);
+  if (!resp.ok) {
+    const err = new Error(
+      data?.error || `apply-ingredient-swap HTTP ${resp.status}`,
+    );
+    err.status = resp.status;
+    throw err;
+  }
+  return data;
+}
+
 module.exports = {
   requestMatrix,
   getMatrixJobStatus,
   pollMatrix,
   generateMatrix,
+  suggestIngredientSwaps,
+  applyIngredientSwap,
 };

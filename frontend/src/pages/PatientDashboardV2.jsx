@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { patientApi, recommendationApi } from "../api/baseFetch.js";
+import IngredientSwapModal from "../components/IngredientSwapModal.jsx";
 import MarkdownContent from "../components/UI/MarkdownContent.jsx";
 import "./PatientDashboardV2.css";
 
@@ -45,6 +46,7 @@ const Icons = {
   flame:
     "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z",
   cart: "M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0",
+  swap: "M16 3h5v5M4 20 21 4M21 16v5h-5M15 15l6 6M4 4l5 5",
   clock:
     "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 6v6l4 2",
   star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
@@ -362,8 +364,9 @@ function DayCard({ day, dayData }) {
 }
 
 // ─── Shopping list ─────────────────────────────────────────────────────────────
-function ShoppingList({ items }) {
+function ShoppingList({ items, recordId, onPlanUpdated, onSwapError }) {
   const [checked, setChecked] = useState({});
+  const [swapTarget, setSwapTarget] = useState(null);
   const toggle = (key) =>
     setChecked((prev) => ({ ...prev, [key]: !prev[key] }));
 
@@ -388,6 +391,14 @@ function ShoppingList({ items }) {
   const categories = Object.keys(grouped).sort();
   const total = items.length;
   const done = Object.values(checked).filter(Boolean).length;
+
+  function handleSwapApplied(row, alt) {
+    const oldName = swapTarget;
+    setSwapTarget(null);
+    if (onPlanUpdated) {
+      onPlanUpdated(row, { oldName, alt });
+    }
+  }
 
   return (
     <div className="pd-shopping-wrap">
@@ -431,11 +442,36 @@ function ShoppingList({ items }) {
                 </div>
                 <span className="pd-item-name">{item.item}</span>
                 <span className="pd-item-qty">{item.qty}</span>
+                {recordId ? (
+                  <button
+                    type="button"
+                    className="pd-shopping-swap-btn"
+                    title={`Swap ${item.item}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSwapTarget(item.item);
+                    }}
+                  >
+                    <Icon d={Icons.swap} size={13} />
+                    Swap
+                  </button>
+                ) : null}
               </div>
             );
           })}
         </div>
       ))}
+
+      {swapTarget && recordId ? (
+        <IngredientSwapModal
+          theme="pd"
+          patientId={recordId}
+          oldName={swapTarget}
+          onClose={() => setSwapTarget(null)}
+          onApplied={handleSwapApplied}
+          onError={onSwapError}
+        />
+      ) : null}
     </div>
   );
 }
@@ -472,6 +508,7 @@ export default function PatientDashboardV2() {
   const [diarySaving, setDiarySaving] = useState(false);
   const [diaryMsg, setDiaryMsg] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [swapMsg, setSwapMsg] = useState("");
 
   const recordId = profile?.record_id;
   const isApproved = plan?.status === "approved";
@@ -780,10 +817,24 @@ export default function PatientDashboardV2() {
                 <Icon d={Icons.cart} size={16} stroke="#6366f1" />
                 <h2 className="pd-section-title">Ingredients to buy</h2>
                 <span className="pd-section-hint">
-                  Tap items to check them off as you shop
+                  Tap to check off · Swap for AI alternatives
                 </span>
               </div>
-              <ShoppingList items={shoppingList} />
+              {swapMsg && (
+                <div className="pd-alert pd-alert-success">{swapMsg}</div>
+              )}
+              <ShoppingList
+                items={shoppingList}
+                recordId={recordId}
+                onPlanUpdated={(row, { oldName, alt }) => {
+                  setPlan(row);
+                  setSwapMsg(
+                    `Replaced "${oldName}" with "${alt.name}" across all meals.`,
+                  );
+                  setTimeout(() => setSwapMsg(""), 6000);
+                }}
+                onSwapError={(msg) => setError(msg)}
+              />
             </section>
           )}
         </div>
