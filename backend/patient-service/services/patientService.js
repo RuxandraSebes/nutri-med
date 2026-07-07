@@ -23,7 +23,6 @@ function defaultProfileData() {
   };
 }
 
-/** Shape expected by recommendation / LLM orchestration (legacy + extended). */
 function toPatientObject(row) {
   if (!row) return null;
   const pd = row.profile_data || {};

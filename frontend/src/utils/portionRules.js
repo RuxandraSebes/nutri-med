@@ -1,5 +1,3 @@
-/** Client-side portion rounding (mirrors ai-service/portion_rules.py). */
-
 const RULES = [
   { re: /\begg\b|\beggs\b/i, step: 50, min: 50 },
   {
@@ -34,27 +32,4 @@ export function roundPortionG(name, portionG) {
   const clamped = Math.max(min, p);
   const rounded = Math.round(clamped / step) * step;
   return Math.max(min, rounded);
-}
-
-const MEALS = ["Breakfast", "Lunch", "Dinner", "Snack", "Morning Snack"];
-
-export function collectUniqueIngredients(weekly) {
-  if (!weekly || typeof weekly !== "object") return [];
-  const seen = new Map();
-  for (const day of Object.keys(weekly)) {
-    const dayObj = weekly[day];
-    if (!dayObj || typeof dayObj !== "object") continue;
-    for (const meal of MEALS) {
-      const foods = dayObj[meal]?.foods;
-      if (!Array.isArray(foods)) continue;
-      for (const f of foods) {
-        const name = String(f?.name || "").trim();
-        if (!name) continue;
-        const key = name.toLowerCase();
-        if (!seen.has(key)) seen.set(key, { name, count: 0 });
-        seen.get(key).count += 1;
-      }
-    }
-  }
-  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

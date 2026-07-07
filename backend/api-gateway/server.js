@@ -6,7 +6,6 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Browser clients (Vite on :5173) call the gateway on another origin — enable CORS.
 const corsOrigin = process.env.CORS_ORIGIN || "*";
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", corsOrigin);
@@ -29,14 +28,8 @@ const services = {
   auth: process.env.AUTH_SERVICE_URL || "http://localhost:3010",
   ai: process.env.AI_SERVICE_URL || "http://localhost:5001",
 };
-// Long-running plan generation (polls AI inside recommendation-service); align with AI_MATRIX_POLL_TIMEOUT_MS.
 const PROXY_TIMEOUT_MS = Number(process.env.GATEWAY_PROXY_TIMEOUT_MS || 1200000);
 
-/**
- * Node's global fetch uses undici with default headersTimeout ≈ 300s, which breaks
- * long POST /api/recommendations/.../plan before AbortController fires. Match Agent
- * timeouts to the gateway proxy budget.
- */
 const proxyDispatcher = new Agent({
   headersTimeout: PROXY_TIMEOUT_MS,
   bodyTimeout: PROXY_TIMEOUT_MS,

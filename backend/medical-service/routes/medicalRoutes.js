@@ -4,7 +4,6 @@ const { requireAuth } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// Used by recommendation-service over Docker network (no JWT)
 router.get("/patients/:patientId/specialist-object", (req, res, next) =>
   medicalController.getLatest(req, res).catch(next),
 );

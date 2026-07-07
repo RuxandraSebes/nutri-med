@@ -106,8 +106,6 @@ services:
       medical-service:
         condition: service_started
 
-  # Optional GPU (NVIDIA): add deploy.resources.reservations.devices + nvidia runtime
-  # to cut inference time sharply; CPU-only is fine for development.
   ollama:
     image: ollama/ollama:latest
     volumes:
@@ -118,7 +116,6 @@ services:
       timeout: 5s
       retries: 20
 
-  # Best-effort model pull (does NOT block other services — run manual pull if this fails).
   ollama-init:
     image: ollama/ollama:latest
     restart: "no"
@@ -127,7 +124,6 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    # Wait for daemon inside `ollama` to listen, then pull. Exit 0 even if pull fails so `compose up` succeeds.
     command:
       [
         "sh",
@@ -144,18 +140,16 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
       OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-8192}
       OLLAMA_REPAIR_NUM_PREDICT: ${OLLAMA_REPAIR_NUM_PREDICT:-8192}
-      OLLAMA_BATCH_NUM_PREDICT: ${OLLAMA_BATCH_NUM_PREDICT:-1800}
-      OLLAMA_BATCH_NUM_CTX: ${OLLAMA_BATCH_NUM_CTX:-6000}
+      OLLAMA_BATCH_NUM_PREDICT: ${OLLAMA_BATCH_NUM_PREDICT:-2800}
+      OLLAMA_BATCH_NUM_CTX: ${OLLAMA_BATCH_NUM_CTX:-8192}
+      MATRIX_DAYS_PER_BATCH: ${MATRIX_DAYS_PER_BATCH:-1}
+      MATRIX_LLM_PARALLEL: ${MATRIX_LLM_PARALLEL:-3}
       OLLAMA_NOTES_NUM_PREDICT: ${OLLAMA_NOTES_NUM_PREDICT:-256}
       LLM_PATIENT_CTX_MAX: ${LLM_PATIENT_CTX_MAX:-2200}
       LLM_NUTRITION_LINES_MAX: ${LLM_NUTRITION_LINES_MAX:-28}
       RAG_NUTRITION_TOP_K: ${RAG_NUTRITION_TOP_K:-6}
-      # 1 = no Chroma/embeddings in ai-service; matrix uses MySQL patient context only; log prompts by default.
-      MATRIX_SKIP_RAG: "1"
-      MATRIX_SIMPLE_MODE: "1"
       MATRIX_LOG_PROMPTS: ${MATRIX_LOG_PROMPTS:-}
       MATRIX_LOG_PROMPTS_MAX_CHARS: ${MATRIX_LOG_PROMPTS_MAX_CHARS:-0}
-      RAG_CONTEXT_MAX_CHARS: ${RAG_CONTEXT_MAX_CHARS:-12000}
       RAG_MIN_DOCS: ${RAG_MIN_DOCS:-3}
       RAG_SIMILAR_TOP_K: ${RAG_SIMILAR_TOP_K:-3}
       RAG_SIMILAR_CTX_STRING_CAP: ${RAG_SIMILAR_CTX_STRING_CAP:-6000}
@@ -176,6 +170,7 @@ services:
     ports:
       - "3011:5001"
     volumes:
+      - ./ai-service/datasets:/app/datasets
       - ./ai-service/db_nutritie:/app/db_nutritie
       - ./ai-service/db_pacienti:/app/db_pacienti
     depends_on:

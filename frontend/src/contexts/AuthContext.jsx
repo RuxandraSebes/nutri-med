@@ -52,9 +52,7 @@ export function AuthProvider({ children }) {
     if (u.role === "patient") {
       try {
         await patientApi.bootstrap();
-      } catch {
-        /* may already exist */
-      }
+      } catch {}
     }
     return u;
   }, []);

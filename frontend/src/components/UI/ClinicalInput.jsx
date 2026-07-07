@@ -1,13 +1,3 @@
-/**
- * ClinicalInput — form field atom for clinical data entry
- *
- * Props:
- *   label    — string
- *   hint     — string (small helper text)
- *   unit     — string (suffix, e.g. "mmHg", "mg/dL")
- *   error    — string
- *   type     — "input" | "select" | "textarea"
- */
 export default function ClinicalInput({
   label,
   hint,

@@ -1,31 +1,15 @@
-"""
-ingestion_patients.py
-─────────────────────
-Ingests the patient diet recommendations CSV into ChromaDB (db_pacienti).
-Each document represents a historical patient case with their condition,
-biomarkers, and previously successful meal plan.
-
-These cases are used as few-shot examples during matrix generation via
-getSimilarPatientsContext() in rag_service.py.
-"""
-
 import pandas as pd
 import os
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 
-# ── Config ────────────────────────────────────────────────────────────────────
-FILE_PATH  = "datasets/Personalized_Diet_Recommendations.csv"
-PATH_DB    = "./db_pacienti"
+FILE_PATH = "datasets/Personalized_Diet_Recommendations.csv"
+PATH_DB = "./db_pacienti"
 COLLECTION = "patient_history"
 
 
 def build_patient_document(row: dict) -> Document:
-    """
-    Build a richly structured narrative document for a historical patient case.
-    The text is designed for semantic search: disease + biomarkers + outcome.
-    """
     text = (
         f"Patient ID: {row.get('Patient_ID', 'N/A')}. "
         f"Diagnosis: {row.get('Chronic_Disease', 'N/A')}. "
@@ -48,11 +32,11 @@ def build_patient_document(row: dict) -> Document:
     return Document(
         page_content=text,
         metadata={
-            "patient_id":  str(row.get("Patient_ID",      "")),
-            "disease":     str(row.get("Chronic_Disease",  "")),
-            "bmi":         str(row.get("BMI",              "")),
-            "meal_plan":   str(row.get("Recommended_Meal_Plan", "")),
-            "kcal_target": str(row.get("Recommended_Calories",  "")),
+            "patient_id": str(row.get("Patient_ID", "")),
+            "disease": str(row.get("Chronic_Disease", "")),
+            "bmi": str(row.get("BMI", "")),
+            "meal_plan": str(row.get("Recommended_Meal_Plan", "")),
+            "kcal_target": str(row.get("Recommended_Calories", "")),
         }
     )
 
@@ -63,7 +47,7 @@ def main():
         return
 
     df = pd.read_csv(FILE_PATH)
-    df.columns = [c.strip() for c in df.columns]   # strip whitespace from headers
+    df.columns = [c.strip() for c in df.columns]
 
     print(f"Se procesează {len(df)} înregistrări din {FILE_PATH}...")
 
@@ -71,7 +55,7 @@ def main():
 
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-    vector_db = Chroma.from_documents(
+    Chroma.from_documents(
         documents=patient_docs,
         embedding=embeddings,
         persist_directory=PATH_DB,

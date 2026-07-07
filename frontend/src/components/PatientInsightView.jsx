@@ -86,7 +86,6 @@ function InfoRow({ label, value }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════ */
 export default function PatientInsightView({
   dashboardData,
   setDashboardData,
@@ -136,7 +135,6 @@ export default function PatientInsightView({
         maxWidth: 900,
       }}
     >
-      {/* ── Intro ── */}
       <div className="sd-insight-intro">
         <div
           style={{
@@ -162,7 +160,6 @@ export default function PatientInsightView({
         </p>
       </div>
 
-      {/* ── Patient profile ── */}
       {patientView ? (
         <div className="sd-insight-card">
           <div className="sd-insight-card-header">
@@ -186,7 +183,6 @@ export default function PatientInsightView({
           </div>
 
           <div className="sd-insight-card-body">
-            {/* Demographics */}
             {patientView.demographics && (
               <div>
                 <div className="sd-label" style={{ marginBottom: 8 }}>
@@ -226,7 +222,6 @@ export default function PatientInsightView({
               </div>
             )}
 
-            {/* Lifestyle */}
             {patientView.lifestyle && (
               <div>
                 <div className="sd-label" style={{ marginBottom: 8 }}>
@@ -265,7 +260,6 @@ export default function PatientInsightView({
               </div>
             )}
 
-            {/* Preferences */}
             {patientView.preferences && (
               <div>
                 <div className="sd-label" style={{ marginBottom: 8 }}>
@@ -299,7 +293,6 @@ export default function PatientInsightView({
               </div>
             )}
 
-            {/* 24h diary (read-only) */}
             {patientView.daily_log?.["24h_food_diary_text"] && (
               <div>
                 <div className="sd-label" style={{ marginBottom: 8 }}>
@@ -324,7 +317,6 @@ export default function PatientInsightView({
         </div>
       )}
 
-      {/* ── Journal analysis ── */}
       {patientView?.daily_log?.["24h_food_diary_text"] ? (
         <div className="sd-insight-card">
           <div className="sd-insight-card-header">

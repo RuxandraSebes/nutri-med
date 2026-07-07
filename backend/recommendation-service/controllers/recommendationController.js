@@ -35,11 +35,14 @@ async function completePlan(req, res, next) {
     if (!jobId || typeof jobId !== "string") {
       return res.status(400).json({ error: "Missing or invalid jobId" });
     }
+    const target_macros =
+      req.body?.target_macros ?? req.body?.targetMacros ?? null;
     const result = await recommendationService.completePlanFromJob(
       patientId,
       jobId,
       {
         specialist_id: req.auth?.userId ?? req.body?.specialist_id,
+        target_macros,
       },
     );
     res.json(result);
@@ -93,6 +96,7 @@ async function approvePlan(req, res, next) {
       clinical_strategy: req.body?.clinical_strategy,
       meal_matrix: req.body?.meal_matrix,
       shopping_list: req.body?.shopping_list,
+      target_macros: req.body?.target_macros ?? req.body?.targetMacros ?? null,
     };
     const updated = await recommendationService.approveLatestPlan(
       patientId,

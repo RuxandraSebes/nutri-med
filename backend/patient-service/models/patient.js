@@ -5,11 +5,15 @@ module.exports = (sequelize) =>
     "Patient",
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      user_id: { type: DataTypes.INTEGER, allowNull: false, unique: true },
+      user_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        unique: "uq_patients_user_id",
+      },
       public_patient_id: {
         type: DataTypes.STRING(32),
         allowNull: true,
-        unique: true,
+        unique: "uq_patients_public_patient_id",
       },
       age: { type: DataTypes.INTEGER, allowNull: true },
       gender: { type: DataTypes.STRING(32), allowNull: true },

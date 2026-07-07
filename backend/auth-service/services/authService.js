@@ -75,6 +75,5 @@ module.exports = {
   register,
   login,
   me,
-  signToken,
   JWT_SECRET,
 };

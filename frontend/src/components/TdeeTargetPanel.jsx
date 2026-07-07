@@ -95,10 +95,11 @@ export default function TdeeTargetPanel({
             <MacroTile label="Fat" value={active.fat_g} unit="g" />
           </div>
           <p className="sd-tdee-footnote">
-            These values are sent to the AI when you generate the plan. Matrix:
-            4 slots (Breakfast, Lunch, Dinner, Snack) — exactly one food per
-            slot with portion weight in grams; no food repeats within the same
-            day.
+            These values are computed in the backend (tdee.js) and sent to the AI
+            when you generate the plan — the AI service does not recalculate TDEE.
+            Matrix: 4 meals per day; breakfast, lunch, and dinner each have 3 foods
+            (protein, carb, vegetable); snack has 1 food. No food repeats within the
+            same day; each food may appear at most twice in the week.
           </p>
         </div>
       )}

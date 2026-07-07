@@ -78,5 +78,15 @@
     {"name": "Rye", "calories": 338, "protein_g": 10.3, "carbs_g": 75.9, "fiber_g": 15.1},
     {"name": "Millet", "calories": 378, "protein_g": 11.0, "carbs_g": 73.0, "fiber_g": 8.5},
     {"name": "Corn (Dry Grain)", "calories": 365, "protein_g": 9.4, "carbs_g": 74.0, "fiber_g": 7.3}
+  ],
+  "fats": [
+    {"name": "Olive Oil", "calories": 884, "protein_g": 0, "fat_g": 100.0, "carbs_g": 0},
+    {"name": "Avocado", "calories": 160, "protein_g": 2.0, "fat_g": 14.7, "carbs_g": 8.5},
+    {"name": "Almonds", "calories": 579, "protein_g": 21.2, "fat_g": 49.9, "carbs_g": 21.6},
+    {"name": "Walnuts", "calories": 654, "protein_g": 15.2, "fat_g": 65.2, "carbs_g": 13.7},
+    {"name": "Peanut Butter", "calories": 588, "protein_g": 25.1, "fat_g": 50.4, "carbs_g": 20.0},
+    {"name": "Chia Seeds", "calories": 486, "protein_g": 16.5, "fat_g": 30.7, "carbs_g": 42.1},
+    {"name": "Flaxseed", "calories": 534, "protein_g": 18.3, "fat_g": 42.2, "carbs_g": 28.9},
+    {"name": "Sunflower Seeds", "calories": 584, "protein_g": 20.8, "fat_g": 51.5, "carbs_g": 20.0}
   ]
 }

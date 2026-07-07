@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { roundPortionG } from "../utils/portionRules.js";
 
-/* ── Icon helper ────────────────────────────────────────────────────────── */
 function Icon({ d, size = 15, stroke = "currentColor", sw = 2 }) {
   return (
     <svg
@@ -66,7 +65,6 @@ function getMealBlock(dayData, meal) {
   return dayData?.[key] || { foods: [] };
 }
 
-/* ── helpers ─────────────────────────────────────────────────────────────── */
 function parseNum(raw) {
   if (raw === "" || raw == null) return 0;
   const n = Number(raw);
@@ -90,7 +88,6 @@ function Spinner({ size = 13 }) {
   );
 }
 
-/* ── Status badge ────────────────────────────────────────────────────────── */
 function StatusBadge({ status }) {
   const cfg = {
     pending: { cls: "sd-badge-amber", label: "Pending Review", dot: "#f59e0b" },
@@ -107,7 +104,6 @@ function StatusBadge({ status }) {
   );
 }
 
-/* ── Action button ───────────────────────────────────────────────────────── */
 function Btn({ children, variant = "secondary", disabled, onClick, loading }) {
   const v =
     {
@@ -134,7 +130,6 @@ function Btn({ children, variant = "secondary", disabled, onClick, loading }) {
   );
 }
 
-/* ── Macro badges ────────────────────────────────────────────────────────── */
 function MacroBadges({ p, c, f, kcal }) {
   const fmt = (v) => (v != null && v !== "" ? Number(v).toFixed(1) : "—");
   const fmtK = (v) => (v != null && v !== "" ? Number(v).toFixed(0) : "—");
@@ -148,7 +143,6 @@ function MacroBadges({ p, c, f, kcal }) {
   );
 }
 
-/* ── Food row (editable) ─────────────────────────────────────────────────── */
 function FoodRow({ day, meal, index, food, onPatchFood }) {
   return (
     <div className="sd-food-row">
@@ -231,7 +225,6 @@ function FoodRow({ day, meal, index, food, onPatchFood }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════ */
 export default function MealMatrix({
   dashboardData,
   setDashboardData,
@@ -355,7 +348,6 @@ export default function MealMatrix({
     setActionBusy(null);
   }
 
-  /* ── empty state ── */
   if (!plan || !weekly) {
     return (
       <div className="sd-empty">
@@ -398,9 +390,7 @@ export default function MealMatrix({
         paddingBottom: 24,
       }}
     >
-      {/* ── Sticky workflow bar ── */}
       <div className="sd-sticky-bar">
-        {/* Top row: plan info + approve/reject */}
         <div className="sd-sticky-bar-top">
           <div style={{ minWidth: 0, flex: 1 }}>
             <div
@@ -450,7 +440,6 @@ export default function MealMatrix({
           </div>
         </div>
 
-        {/* Bottom row: draft actions */}
         <div className="sd-sticky-bar-bottom">
           <Btn
             variant="secondary"
@@ -486,7 +475,6 @@ export default function MealMatrix({
         </div>
       </div>
 
-      {/* ── Approved caloric target ── */}
       {inner?.target_macros && (
         <div className="sd-tdee-panel sd-tdee-panel-compact">
           <div className="sd-tdee-panel-header">
@@ -527,7 +515,6 @@ export default function MealMatrix({
         </div>
       )}
 
-      {/* ── Clinical strategy ── */}
       <div className="sd-strategy-box">
         <div className="sd-strategy-eyebrow">
           Strategic guidance (clinical notes)
@@ -549,12 +536,10 @@ export default function MealMatrix({
         />
       </div>
 
-      {/* ── Weekly matrix grid ── */}
       {weekly ? (
         <div className="sd-week-grid">
           {DAYS.map((day) => (
             <div key={day} className="sd-day-card">
-              {/* Day header */}
               <div className="sd-day-header">
                 <span className="sd-day-name">{day}</span>
                 <div className="sd-day-kcal-input">
@@ -592,7 +577,6 @@ export default function MealMatrix({
                 </div>
               </div>
 
-              {/* Meals */}
               <div className="sd-day-meals">
                 {MEALS.map((meal) => {
                   const block = getMealBlock(weekly[day], meal);
@@ -600,7 +584,6 @@ export default function MealMatrix({
                   const col = MEAL_COLOR[meal];
                   return (
                     <div key={meal} className="sd-meal-block">
-                      {/* Meal header */}
                       <div className="sd-meal-block-header">
                         <span
                           className="sd-meal-time-badge"
@@ -661,7 +644,6 @@ export default function MealMatrix({
                         </div>
                       </div>
 
-                      {/* Food rows */}
                       <div className="sd-meal-body">
                         {foods.length > 0 ? (
                           foods.map((food, idx) => (
@@ -695,7 +677,6 @@ export default function MealMatrix({
           ))}
         </div>
       ) : mm?.meals?.length ? (
-        /* ── Flat meals fallback ── */
         <div>
           <div className="sd-flat-warning">
             Full weekly matrix unavailable — editing flat meal preview.

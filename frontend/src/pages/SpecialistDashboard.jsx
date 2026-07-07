@@ -10,7 +10,6 @@ import {
 } from "../utils/planShape.js";
 import "./SpecialistDashboard.css";
 
-/* ── tiny icon helper ─────────────────────────────────────────────────────── */
 function Icon({
   d,
   size = 16,
@@ -66,7 +65,6 @@ function Spinner({ size = 14 }) {
   );
 }
 
-/* ── Generation banner ──────────────────────────────────────────────────── */
 function MatrixGenerationBanner({ elapsedSec }) {
   const pct = Math.min(94, 8 + Math.min(elapsedSec, 720) / 10);
   return (
@@ -81,7 +79,6 @@ function MatrixGenerationBanner({ elapsedSec }) {
   );
 }
 
-/* ── Biomarker tile ─────────────────────────────────────────────────────── */
 function BiomarkerTile({ label, value, unit, normalRange }) {
   const hasVal = value !== null && value !== undefined && value !== "";
   return (
@@ -98,7 +95,6 @@ function BiomarkerTile({ label, value, unit, normalRange }) {
   );
 }
 
-/* ── Saved clinical object ──────────────────────────────────────────────── */
 function SavedClinicalObject({ result }) {
   if (!result) return null;
 
@@ -138,7 +134,6 @@ function SavedClinicalObject({ result }) {
           gap: 16,
         }}
       >
-        {/* Tags */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {(result.primary_disease || result.icd10) && (
             <span className="sd-badge sd-badge-indigo">
@@ -152,7 +147,6 @@ function SavedClinicalObject({ result }) {
           )}
         </div>
 
-        {/* Biomarkers */}
         {result.biomarkers && (
           <div>
             <div
@@ -196,7 +190,6 @@ function SavedClinicalObject({ result }) {
           </div>
         )}
 
-        {/* Body composition */}
         {result.body_composition && (
           <div>
             <div
@@ -247,7 +240,6 @@ function SavedClinicalObject({ result }) {
           </div>
         )}
 
-        {/* Constraints */}
         {result.clinical_constraints?.length > 0 && (
           <div>
             <div
@@ -282,7 +274,6 @@ function SavedClinicalObject({ result }) {
   );
 }
 
-/* ── Helpers ────────────────────────────────────────────────────────────── */
 function splitList(s) {
   return String(s || "")
     .split(/[\n,]+/)
@@ -296,7 +287,6 @@ const TABS = [
   { id: "meal", label: "Meal plan review", icon: I.meal },
 ];
 
-/* ═══════════════════════════════════════════════════════════════════════════ */
 export default function SpecialistDashboard() {
   const [dashboardData, setDashboardData] = useState({
     searchQ: "",
@@ -344,7 +334,6 @@ export default function SpecialistDashboard() {
   const [journalError, setJournalError] = useState("");
   const [planLoading, setPlanLoading] = useState(false);
 
-  /* ── search ─────────────────────────────────────────────────────────── */
   const runSearch = useCallback(async () => {
     setSearchBusy(true);
     try {
@@ -366,7 +355,6 @@ export default function SpecialistDashboard() {
       .catch(() => {});
   }, []);
 
-  /* ── load patient view ──────────────────────────────────────────────── */
   useEffect(() => {
     const rid = dashboardData.selectedRecordId;
     if (!rid) {
@@ -481,7 +469,6 @@ export default function SpecialistDashboard() {
     };
   }, [dashboardData.selectedRecordId]);
 
-  /* ── elapsed timer ──────────────────────────────────────────────────── */
   useEffect(() => {
     if (!matrixJobInfo) {
       setMatrixElapsedSec(0);
@@ -495,7 +482,6 @@ export default function SpecialistDashboard() {
     return () => clearInterval(id);
   }, [matrixJobInfo]);
 
-  /* ── submit ─────────────────────────────────────────────────────────── */
   async function submit() {
     const {
       selectedRecordId,
@@ -578,6 +564,7 @@ export default function SpecialistDashboard() {
       setPlanActionMsg("Saving draft plan…");
       const planData = await recommendationApi.completePlan(selectedRecordId, {
         jobId: start.jobId,
+        target_macros: target_macros ?? activeTdeeTargetsRef.current,
       });
       setDashboardData((d) => ({
         ...d,
@@ -594,7 +581,6 @@ export default function SpecialistDashboard() {
     }
   }
 
-  /* ── plan actions ───────────────────────────────────────────────────── */
   async function saveDraftToServer() {
     const { selectedRecordId, plan } = dashboardData;
     if (!selectedRecordId || !plan?.plan) {
@@ -639,8 +625,10 @@ export default function SpecialistDashboard() {
       setMatrixJobInfo({ startedAt: Date.now() });
       await pollUntilMatrixDone(start.jobId);
       setMatrixJobInfo(null);
+      const target_macros = activeTdeeTargetsRef.current;
       const planData = await recommendationApi.completePlan(selectedRecordId, {
         jobId: start.jobId,
+        target_macros,
       });
       setDashboardData((d) => ({
         ...d,
@@ -661,6 +649,8 @@ export default function SpecialistDashboard() {
     await recommendationApi.approvePlan(selectedRecordId, {
       clinical_strategy: plan.plan.clinical_strategy,
       meal_matrix: plan.plan.meal_matrix,
+      target_macros:
+        activeTdeeTargetsRef.current ?? plan.plan.target_macros ?? null,
     });
     const refreshed = await recommendationApi.getLatestPlan(selectedRecordId);
     setDashboardData((d) => ({
@@ -695,10 +685,8 @@ export default function SpecialistDashboard() {
     }
   }
 
-  /* ── render ─────────────────────────────────────────────────────────── */
   return (
     <div className="sd-page">
-      {/* ── Header ── */}
       <div className="sd-page-header">
         <div>
           <h1 className="sd-page-title">Specialist Dashboard</h1>
@@ -708,12 +696,10 @@ export default function SpecialistDashboard() {
         </div>
       </div>
 
-      {/* ── Generation banner ── */}
       {matrixJobInfo && (
         <MatrixGenerationBanner elapsedSec={matrixElapsedSec} />
       )}
 
-      {/* ── Safety / approval error ── */}
       {approveSafetyError && (
         <div className="sd-alert sd-alert-error" role="alert">
           <Icon d={I.alert} size={15} />
@@ -723,7 +709,6 @@ export default function SpecialistDashboard() {
         </div>
       )}
 
-      {/* ── Tabs ── */}
       <div className="sd-tab-bar">
         {TABS.map((tab) => (
           <button
@@ -737,7 +722,6 @@ export default function SpecialistDashboard() {
         ))}
       </div>
 
-      {/* ═══════ TAB: WORKSPACE ═══════ */}
       {activeTab === "workspace" && (
         <div className="sd-tab-content">
           <div className="sd-clinical-wrap">
@@ -760,7 +744,6 @@ export default function SpecialistDashboard() {
         </div>
       )}
 
-      {/* ═══════ TAB: PATIENT INSIGHTS ═══════ */}
       {activeTab === "insights" && (
         <div className="sd-tab-content">
           <PatientInsightView
@@ -774,7 +757,6 @@ export default function SpecialistDashboard() {
         </div>
       )}
 
-      {/* ═══════ TAB: MEAL PLAN REVIEW ═══════ */}
       {activeTab === "meal" && (
         <div className="sd-tab-content">
           {planLoading ? (

@@ -1,66 +1,97 @@
-"""
-ingestion.py
-────────────
-Ingests food CSV datasets into ChromaDB (db_nutritie).
-Each food document is enriched with medical use-case tags
-so that disease-based queries (e.g. "diabetes-friendly foods")
-hit the right documents at retrieval time.
-"""
-
 import pandas as pd
 import glob
 import os
+import re
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 
-# ── Config ────────────────────────────────────────────────────────────────────
 PATH_DATASETS = "datasets/"
-PATH_DB       = "db_nutritie"
+PATH_DB = "db_nutritie"
 
-# ── Medical tag rules ─────────────────────────────────────────────────────────
-# These tags are embedded into the document text so ChromaDB can match
-# disease-based queries to nutritional data via semantic similarity.
+_VEGETABLE_NAMES = {
+    "tomato", "cucumber", "carrot", "broccoli", "cauliflower", "spinach", "kale",
+    "lettuce", "cabbage", "brussels sprouts", "green beans", "peas", "asparagus",
+    "eggplant", "zucchini", "bell pepper red", "bell pepper green", "onion",
+    "garlic", "sweet potato", "potato", "beetroot", "radish", "celery",
+    "mushroom white", "shiitake mushroom", "artichoke", "okra", "turnip",
+    "parsnip", "leek", "chard", "arugula", "bok choy", "sauerkraut",
+    "olive green", "olive black", "pumpkin", "butternut squash", "corn",
+    "cassava", "yam", "jicama", "fennel", "endive", "rhubarb", "broccolini",
+    "snap peas",
+}
+_FAT_DENSE_PRODUCE_NAMES = {"avocado", "coconut meat"}
+_LEGUME_RE = re.compile(
+    r"lentil|chickpea|black bean|kidney bean|pinto bean|navy bean|cannellini|"
+    r"lima bean|soybean|edamame|split pea|fava bean|mung bean|adzuki|"
+    r"black eyed pea|white bean|cranberry bean|lupini|soy flour|\bpeas?\b",
+    re.IGNORECASE,
+)
+
+
+def _dataset_group(source: str) -> str | None:
+    m = re.search(r"GROUP(\d)", os.path.basename(source).upper())
+    return f"GROUP{m.group(1)}" if m else None
+
+
+def classify_macro_role(source: str, name: str, protein: float, carbs: float, fat: float) -> str:
+    group = _dataset_group(source)
+    n = str(name or "").strip().lower()
+
+    if group == "GROUP4":
+        return "protein"
+    if group == "GROUP6":
+        return "carb"
+    if group == "GROUP2":
+        return "fat"
+    if group == "GROUP1":
+        return "protein" if protein >= 8 else "fat"
+    if group == "GROUP3":
+        if n in _VEGETABLE_NAMES:
+            return "vegetable"
+        if n in _FAT_DENSE_PRODUCE_NAMES:
+            return "fat"
+        return "fruit"
+    if group == "GROUP5":
+        return "protein" if _LEGUME_RE.search(n) else "fat"
+
+    p_cal, c_cal, f_cal = protein * 4, carbs * 4, fat * 9
+    best = max((("protein", p_cal), ("carb", c_cal), ("fat", f_cal)), key=lambda kv: kv[1])
+    return best[0]
+
 
 def tag_food(row: dict) -> list[str]:
     tags = []
 
-    sugar   = float(row.get("sugars",         0) or 0)
-    fiber   = float(row.get("dietary fiber",  0) or 0)
-    fat     = float(row.get("fat",            0) or 0)
-    protein = float(row.get("protein",        0) or 0)
-    kcal    = float(row.get("caloric value",  0) or 0)
-    sodium  = float(row.get("sodium",         0) or 0)   # present in some datasets
+    sugar = float(row.get("sugars", 0) or 0)
+    fiber = float(row.get("dietary fiber", 0) or 0)
+    fat = float(row.get("fat", 0) or 0)
+    protein = float(row.get("protein", 0) or 0)
+    kcal = float(row.get("caloric value", 0) or 0)
+    sodium = float(row.get("sodium", 0) or 0)
 
-    # Diabetes / blood sugar
     if sugar < 5 and fiber > 2:
         tags += ["diabetes-friendly", "low glycemic index", "suitable for diabetes",
                  "suitable for insulin resistance", "suitable for metabolic syndrome"]
 
-    # Heart / hypertension
     if sodium < 120:
         tags += ["low sodium", "heart-healthy", "suitable for hypertension",
                  "suitable for cardiovascular disease"]
 
-    # Digestion / obesity
     if fiber > 4:
         tags += ["high fiber", "good for digestion", "suitable for obesity",
                  "suitable for weight management", "gut health"]
 
-    # Cardiovascular / weight
     if fat < 3:
         tags += ["low fat", "cardiovascular-friendly", "suitable for cardiovascular disease"]
 
-    # Muscle / recovery
     if protein > 15:
         tags += ["high protein", "muscle support", "suitable for sarcopenia",
                  "suitable for post-surgery recovery"]
 
-    # Weight loss
     if kcal < 50:
         tags += ["low calorie", "weight loss friendly"]
 
-    # Potassium proxy: high fiber + low kcal fruits/veg are usually potassium-rich
     if fiber > 3 and kcal < 80:
         tags += ["potassium-rich", "suitable for hypertension", "suitable for kidney stones"]
 
@@ -68,20 +99,21 @@ def tag_food(row: dict) -> list[str]:
 
 
 def build_enriched_document(row: dict, source: str) -> Document:
-    name    = row.get("food",           "Unknown")
-    kcal    = row.get("caloric value",  0)
-    protein = row.get("protein",        0)
-    carbs   = row.get("carbohydrates",  0)
-    fat     = row.get("fat",            0)
-    sugar   = row.get("sugars",         0)
-    fiber   = row.get("dietary fiber",  0)
-    sodium  = row.get("sodium",         "N/A")
+    name = row.get("food", "Unknown")
+    kcal = row.get("caloric value", 0)
+    protein = row.get("protein", 0)
+    carbs = row.get("carbohydrates", 0)
+    fat = row.get("fat", 0)
+    sugar = row.get("sugars", 0)
+    fiber = row.get("dietary fiber", 0)
+    sodium = row.get("sodium", "N/A")
 
-    tags    = tag_food(row)
+    tags = tag_food(row)
     tag_str = ", ".join(tags) if tags else "general use"
+    macro_role = classify_macro_role(
+        source, name, float(protein or 0), float(carbs or 0), float(fat or 0),
+    )
 
-    # The medical use-case text is what makes disease-based retrieval work.
-    # ChromaDB matches the query "foods for diabetes" against this text.
     text = (
         f"Food: {name}. "
         f"Nutritional values per 100g: {kcal} kcal, "
@@ -95,20 +127,19 @@ def build_enriched_document(row: dict, source: str) -> Document:
     return Document(
         page_content=text,
         metadata={
-            "source":    source,
-            "name":      str(name),
-            "kcal":      float(kcal    or 0),
+            "source": source,
+            "name": str(name),
+            "kcal": float(kcal or 0),
             "protein_g": float(protein or 0),
-            "carbs_g":   float(carbs   or 0),
-            "fat_g":     float(fat     or 0),
-            "fiber_g":   float(fiber   or 0),
-            "sugar_g":   float(sugar   or 0),
-            "tags":      ",".join(tags),
+            "carbs_g": float(carbs or 0),
+            "fat_g": float(fat or 0),
+            "fiber_g": float(fiber or 0),
+            "sugar_g": float(sugar or 0),
+            "tags": ",".join(tags),
+            "macro_role": macro_role,
         }
     )
 
-
-# ── Main ingestion ────────────────────────────────────────────────────────────
 
 def main():
     csv_files = glob.glob(os.path.join(PATH_DATASETS, "*.csv"))
@@ -123,15 +154,12 @@ def main():
         print(f"Se procesează: {f}...")
         df = pd.read_csv(f)
 
-        # Normalise column names: strip whitespace + lowercase
         df.columns = [c.strip().lower() for c in df.columns]
 
-        # Skip patient datasets accidentally placed here
         if "patient_id" in df.columns or "chronic_disease" in df.columns:
             print(f"  ⚠️  Skipping patient dataset: {f}")
             continue
 
-        # Skip files without the expected food column
         if "food" not in df.columns:
             print(f"  ⚠️  Skipping — no 'food' column found in: {f}")
             continue
@@ -150,7 +178,7 @@ def main():
 
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-    vector_db = Chroma.from_documents(
+    Chroma.from_documents(
         documents=all_docs,
         embedding=embeddings,
         persist_directory=PATH_DB,

@@ -78,7 +78,6 @@ export default function PatientProfilePage() {
         const d = p.demographics || {};
         const l = p.lifestyle || {};
         const pr = p.preferences || {};
-        // Food diary is edited from the Patient Dashboard (single source in FE).
 
         setAge(d.age ?? "");
         const g = d.gender || "Female";

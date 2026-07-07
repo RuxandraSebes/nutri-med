@@ -92,7 +92,6 @@ async function getInternalIdByUser(req, res, next) {
   }
 }
 
-/** By DB primary key — for recommendation/medical services (same Docker network). */
 async function getInternalByRecordId(req, res, next) {
   try {
     const id = Number(req.params.id);

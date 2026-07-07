@@ -5,7 +5,11 @@ module.exports = (sequelize) =>
     "User",
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      email: { type: DataTypes.STRING(255), allowNull: false, unique: true },
+      email: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+        unique: "uq_users_email",
+      },
       password_hash: { type: DataTypes.STRING(255), allowNull: false },
       role: {
         type: DataTypes.ENUM("patient", "specialist"),

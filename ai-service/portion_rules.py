@@ -1,21 +1,14 @@
-"""
-Portion rounding and minimum-step rules for meal-matrix foods.
-Makes generated/edited portions practical for cooking (e.g. eggs in 50g steps).
-"""
-
 from __future__ import annotations
 
-import math
 import re
 from typing import Any
 
 try:
     from food_catalog import macros_for_portion, resolve_food
 except ImportError:
-    resolve_food = None  # type: ignore
-    macros_for_portion = None  # type: ignore
+    resolve_food = None
+    macros_for_portion = None
 
-# (pattern, step_g, min_g)
 _PORTION_RULES: list[tuple[re.Pattern[str], int, int]] = [
     (re.compile(r"\begg\b|\beggs\b", re.I), 50, 50),
     (
@@ -26,6 +19,7 @@ _PORTION_RULES: list[tuple[re.Pattern[str], int, int]] = [
         10,
         10,
     ),
+    (re.compile(r"\boil\b|butter(?! bean)|ghee|margarine|\blard\b|tallow", re.I), 5, 5),
     (
         re.compile(
             r"oat|rice|bread|pasta|potato|quinoa|grain|banana|apple|berry|fruit|yogurt|milk|cheese|bean|lentil|chickpea|tofu|nut|seed",
@@ -40,9 +34,52 @@ _PORTION_RULES: list[tuple[re.Pattern[str], int, int]] = [
 DEFAULT_STEP_G = 5
 DEFAULT_MIN_G = 5
 
+_PORTION_MAX_RULES: list[tuple[re.Pattern[str], float]] = [
+    (re.compile(r"\begg\b|\beggs\b", re.I), 200),
+    (re.compile(r"\boil\b|ghee|margarine|\blard\b|tallow|butter(?! bean)", re.I), 30),
+    (re.compile(r"avocado", re.I), 150),
+    (re.compile(r"\bnut|seed|tahini|almond butter|peanut butter", re.I), 60),
+    (
+        re.compile(
+            r"chicken|turkey|beef|pork|salmon|tuna|cod|shrimp|lamb|sardine|mackerel|crab|fish|meat|"
+            r"lobster|scallop|squid|octopus|bison|venison|duck|goose|quail|rabbit|steak",
+            re.I,
+        ),
+        350,
+    ),
+    (re.compile(r"bean|lentil|chickpea|\bpeas?\b|edamame", re.I), 350),
+    (
+        re.compile(
+            r"oat|\brice\b|bread|pasta|potato|quinoa|\bgrain|noodle|couscous|barley|bulgur|farro|"
+            r"millet|buckwheat|cereal|granola|bagel|muffin|pancake|waffle",
+            re.I,
+        ),
+        450,
+    ),
+    (re.compile(r"yogurt|\bmilk\b|cheese", re.I), 350),
+    (
+        re.compile(
+            r"banana|apple|berry|berries|fruit|orange|mango|melon|grape|pear|peach|plum|kiwi|"
+            r"pineapple|cherry|apricot|\bfig|date fruit|guava|papaya|pomegranate|lemon|lime|"
+            r"tangerine|nectarine|persimmon|lychee|starfruit",
+            re.I,
+        ),
+        300,
+    ),
+    (
+        re.compile(
+            r"broccoli|spinach|kale|carrot|pepper|vegetable|salad|lettuce|tomato|cucumber|cabbage|"
+            r"cauliflower|zucchini|asparagus|celery|onion|garlic|beet|eggplant|mushroom|squash|"
+            r"pumpkin|\bcorn\b|artichoke|leek|chard|arugula|okra|turnip|parsnip|fennel|endive",
+            re.I,
+        ),
+        400,
+    ),
+]
+DEFAULT_MAX_G = 350.0
+
 
 def portion_step_for_name(name: str) -> tuple[int, int]:
-    """Return (step_g, min_g) for a food name."""
     n = str(name or "").strip()
     for pattern, step, min_g in _PORTION_RULES:
         if pattern.search(n):
@@ -50,8 +87,15 @@ def portion_step_for_name(name: str) -> tuple[int, int]:
     return DEFAULT_STEP_G, DEFAULT_MIN_G
 
 
+def portion_max_for_name(name: str) -> float:
+    n = str(name or "").strip()
+    for pattern, max_g in _PORTION_MAX_RULES:
+        if pattern.search(n):
+            return max_g
+    return DEFAULT_MAX_G
+
+
 def round_portion_g(name: str, portion_g: float | int | None) -> float:
-    """Round portion to nearest practical step; enforce minimum."""
     try:
         p = float(portion_g or 0)
     except (TypeError, ValueError):
@@ -80,7 +124,6 @@ def _recalc_food_macros_from_catalog(food: dict[str, Any]) -> None:
 
 
 def apply_portion_rules_to_food(food: dict[str, Any]) -> dict[str, Any]:
-    """Round portion_g and refresh macros from catalog when available."""
     if not isinstance(food, dict):
         return food
     name = str(food.get("name") or "")
@@ -100,7 +143,6 @@ def apply_portion_rules_to_food(food: dict[str, Any]) -> dict[str, Any]:
 
 
 def apply_portion_rules_to_matrix(matrix: dict, meals: list[str], days: list[str]) -> dict:
-    """Apply rounding to every food slot and recompute meal/day totals."""
     for day in days:
         day_o = matrix.get(day)
         if not isinstance(day_o, dict):

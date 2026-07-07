@@ -12,9 +12,5 @@ export const patientApi = {
     ),
   getForSpecialist: (recordId) =>
     baseFetch(`/api/patients/patients/for-specialist/${recordId}`),
-  // legacy endpoints (keep for compatibility if any old UI calls remain)
-  getProfile: (userId) => baseFetch(`/api/patients/patients/${userId}/profile`),
-  upsertProfile: (userId, payload) =>
-    baseFetch(`/api/patients/patients/${userId}/profile`, { method: "POST", body: payload }),
 };
 

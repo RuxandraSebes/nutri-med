@@ -2,7 +2,6 @@ import { useState } from "react";
 
 import TdeeTargetPanel from "./TdeeTargetPanel.jsx";
 
-/* ── tiny icon ──────────────────────────────────────────────────────────── */
 function Icon({ d, size = 15, stroke = "#6366f1", sw = 2.2 }) {
   return (
     <svg
@@ -33,7 +32,6 @@ const ICONS = {
   bolt: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
 };
 
-/* ── Section wrapper ────────────────────────────────────────────────────── */
 function Section({ iconPath, title, children }) {
   return (
     <div className="sd-section">
@@ -48,7 +46,6 @@ function Section({ iconPath, title, children }) {
   );
 }
 
-/* ── Metric card ────────────────────────────────────────────────────────── */
 function MetricCard({
   label,
   unit,
@@ -78,7 +75,6 @@ function MetricCard({
   );
 }
 
-/* ── Patient row ────────────────────────────────────────────────────────── */
 function PatientRow({ patient, selected, onClick }) {
   return (
     <button
@@ -112,7 +108,6 @@ function PatientRow({ patient, selected, onClick }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════ */
 export default function ClinicalInputForm({
   dashboardData,
   setDashboardData,
@@ -130,7 +125,6 @@ export default function ClinicalInputForm({
 
   return (
     <div className="sd-clinical-inner">
-      {/* ── Find patient ── */}
       <div className="sd-card">
         <div className="sd-card-header">
           <div className="sd-card-icon">
@@ -145,7 +139,6 @@ export default function ClinicalInputForm({
         </div>
 
         <div className="sd-card-body">
-          {/* Search row */}
           <div style={{ display: "flex", gap: 8 }}>
             <input
               className="sd-input"
@@ -180,7 +173,6 @@ export default function ClinicalInputForm({
             </button>
           </div>
 
-          {/* Results */}
           {d.searchResults?.length > 0 && (
             <div className="sd-patient-results">
               {d.searchResults.map((p) => (
@@ -194,7 +186,6 @@ export default function ClinicalInputForm({
             </div>
           )}
 
-          {/* Selected confirmation */}
           {d.selectedRecordId && (
             <div
               style={{
@@ -220,7 +211,6 @@ export default function ClinicalInputForm({
         </div>
       </div>
 
-      {/* ── Clinical input form ── */}
       <div className="sd-card">
         <div className="sd-card-header">
           <div className="sd-card-icon">
@@ -254,7 +244,6 @@ export default function ClinicalInputForm({
         </div>
 
         <div className="sd-card-body">
-          {/* Diagnosis */}
           <Section iconPath={ICONS.diag} title="Diagnosis">
             <div>
               <label className="sd-label">Primary disease / ICD-10 label</label>
@@ -304,7 +293,6 @@ export default function ClinicalInputForm({
             </div>
           </Section>
 
-          {/* Biometric markers */}
           <Section iconPath={ICONS.pulse} title="Biometric markers">
             <div className="sd-metric-grid">
               <MetricCard
@@ -342,7 +330,6 @@ export default function ClinicalInputForm({
             </div>
           </Section>
 
-          {/* Body composition */}
           <Section iconPath={ICONS.body} title="Body composition">
             <div className="sd-metric-grid">
               <MetricCard
@@ -383,7 +370,6 @@ export default function ClinicalInputForm({
             </div>
           </Section>
 
-          {/* Clinical constraints */}
           <Section iconPath={ICONS.notes} title="Clinical constraints">
             <div>
               <label className="sd-label">Allergies (comma or newline)</label>
@@ -428,7 +414,6 @@ export default function ClinicalInputForm({
           />
         </div>
 
-        {/* Submit bar */}
         <div className="sd-card-footer">
           <button
             type="button"

@@ -1,7 +1,3 @@
-/**
- * Build a consolidated shopping list from meal_matrix.weekly (7×4) and optional flat meals.
- */
-
 function consolidateShoppingList(meal_matrix) {
   if (!meal_matrix || typeof meal_matrix !== "object") return [];
 

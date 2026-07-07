@@ -4,7 +4,6 @@ import IngredientSwapModal from "../components/IngredientSwapModal.jsx";
 import MarkdownContent from "../components/UI/MarkdownContent.jsx";
 import "./PatientDashboardV2.css";
 
-// ─── Icons ────────────────────────────────────────────────────────────────────
 function Icon({
   d,
   size = 16,
@@ -55,7 +54,6 @@ const Icons = {
   bolt: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
 };
 
-// ─── Tiny helpers ─────────────────────────────────────────────────────────────
 function Spinner({ size = 16 }) {
   return (
     <svg
@@ -162,7 +160,6 @@ function StatusPill({ status }) {
   );
 }
 
-// ─── Daily Macro Banner ────────────────────────────────────────────────────────
 function DailyMacroBanner({ targetMacros }) {
   if (!targetMacros) return null;
   const { kcal, protein_g, carbs_g, fat_g } = targetMacros;
@@ -228,7 +225,6 @@ function DailyMacroBanner({ targetMacros }) {
   );
 }
 
-// ─── Meal timeline row ────────────────────────────────────────────────────────
 function MealTimelineRow({ meal, index }) {
   const colors = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];
   const color = colors[index % colors.length];
@@ -280,7 +276,6 @@ function MealTimelineRow({ meal, index }) {
   );
 }
 
-// ─── Weekly matrix day card ───────────────────────────────────────────────────
 function DayCard({ day, dayData }) {
   const MEALS = ["Breakfast", "Lunch", "Dinner", "Snack"];
   const MEAL_TIMES = {
@@ -363,7 +358,6 @@ function DayCard({ day, dayData }) {
   );
 }
 
-// ─── Shopping list ─────────────────────────────────────────────────────────────
 function ShoppingList({ items, recordId, onPlanUpdated, onSwapError }) {
   const [checked, setChecked] = useState({});
   const [swapTarget, setSwapTarget] = useState(null);
@@ -380,7 +374,6 @@ function ShoppingList({ items, recordId, onPlanUpdated, onSwapError }) {
     );
   }
 
-  // Group by category if available
   const grouped = items.reduce((acc, item) => {
     const cat = item.category || "Other";
     if (!acc[cat]) acc[cat] = [];
@@ -476,7 +469,6 @@ function ShoppingList({ items, recordId, onPlanUpdated, onSwapError }) {
   );
 }
 
-// ─── Empty state ──────────────────────────────────────────────────────────────
 function EmptyState({ icon, title, subtitle }) {
   return (
     <div className="pd-empty">
@@ -489,7 +481,6 @@ function EmptyState({ icon, title, subtitle }) {
   );
 }
 
-// ─── Tab definitions ──────────────────────────────────────────────────────────
 const TABS = [
   { id: "today", label: "Today", icon: Icons.home },
   { id: "plan", label: "Diet Plan", icon: Icons.calendar },
@@ -497,7 +488,6 @@ const TABS = [
   { id: "profile", label: "My Profile", icon: Icons.user },
 ];
 
-// ─── Main component ───────────────────────────────────────────────────────────
 export default function PatientDashboardV2() {
   const [profile, setProfile] = useState(null);
   const [plan, setPlan] = useState(null);
@@ -599,7 +589,6 @@ export default function PatientDashboardV2() {
 
   return (
     <div className="pd-root">
-      {/* ── Page header ── */}
       <div className="pd-page-header">
         <div>
           <h1 className="pd-page-title">My Health Dashboard</h1>
@@ -636,7 +625,6 @@ export default function PatientDashboardV2() {
         </div>
       )}
 
-      {/* ── Tab bar ── */}
       <div className="pd-tab-bar">
         {TABS.map((tab) => (
           <button
@@ -650,12 +638,8 @@ export default function PatientDashboardV2() {
         ))}
       </div>
 
-      {/* ─────────────────────────────────────────────────────────────────────── */}
-      {/* TAB: TODAY */}
-      {/* ─────────────────────────────────────────────────────────────────────── */}
       {activeTab === "today" && (
         <div className="pd-tab-content">
-          {/* Macro targets */}
           {isApproved && targetMacros ? (
             <section className="pd-section">
               <div className="pd-section-header">
@@ -687,7 +671,6 @@ export default function PatientDashboardV2() {
             </div>
           )}
 
-          {/* Clinical strategy */}
           {isApproved && clinicalStrategy && (
             <section className="pd-section">
               <div className="pd-section-header">
@@ -700,7 +683,6 @@ export default function PatientDashboardV2() {
             </section>
           )}
 
-          {/* 24h diary */}
           <section className="pd-section">
             <div className="pd-section-header">
               <Icon d={Icons.note} size={16} stroke="#6366f1" />
@@ -741,9 +723,6 @@ export default function PatientDashboardV2() {
         </div>
       )}
 
-      {/* ─────────────────────────────────────────────────────────────────────── */}
-      {/* TAB: DIET PLAN */}
-      {/* ─────────────────────────────────────────────────────────────────────── */}
       {activeTab === "plan" && (
         <div className="pd-tab-content">
           {!isApproved ? (
@@ -754,7 +733,6 @@ export default function PatientDashboardV2() {
             />
           ) : (
             <>
-              {/* Flat meals timeline */}
               {meals?.length > 0 && (
                 <section className="pd-section">
                   <div className="pd-section-header">
@@ -773,7 +751,6 @@ export default function PatientDashboardV2() {
                 </section>
               )}
 
-              {/* Weekly matrix */}
               {weekly && (
                 <section className="pd-section">
                   <div className="pd-section-header">
@@ -800,9 +777,6 @@ export default function PatientDashboardV2() {
         </div>
       )}
 
-      {/* ─────────────────────────────────────────────────────────────────────── */}
-      {/* TAB: SHOPPING */}
-      {/* ─────────────────────────────────────────────────────────────────────── */}
       {activeTab === "shopping" && (
         <div className="pd-tab-content">
           {!isApproved ? (
@@ -840,9 +814,6 @@ export default function PatientDashboardV2() {
         </div>
       )}
 
-      {/* ─────────────────────────────────────────────────────────────────────── */}
-      {/* TAB: PROFILE (read-only summary; full editing at /patient/profile) */}
-      {/* ─────────────────────────────────────────────────────────────────────── */}
       {activeTab === "profile" && (
         <div className="pd-tab-content">
           {!profile ? (

@@ -1,13 +1,3 @@
-/**
- * Button atom
- *
- * Props:
- *   variant  — "primary" | "green" | "ghost" | "danger" | "warning"
- *   size     — "sm" | "md" | "lg"
- *   loading  — bool
- *   icon     — ReactNode (prepended)
- *   iconEnd  — ReactNode (appended)
- */
 export default function Button({
   variant = "ghost",
   size = "md",

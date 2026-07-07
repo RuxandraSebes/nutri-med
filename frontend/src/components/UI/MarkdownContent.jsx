@@ -1,16 +1,10 @@
-/**
- * MarkdownContent — lightweight markdown renderer
- * Supports: **bold**, *italic*, bullet lists (- and *), numbered lists,
- * headings (#, ##, ###), line breaks.
- * No external dependencies needed.
- */
 export default function MarkdownContent({ content = "", className = "" }) {
   if (!content) return null;
 
   const lines = content.split("\n");
   const elements = [];
   let listBuffer = [];
-  let listType = null; // "ul" | "ol"
+  let listType = null;
 
   function flushList() {
     if (!listBuffer.length) return;
@@ -31,7 +25,6 @@ export default function MarkdownContent({ content = "", className = "" }) {
   lines.forEach((line, i) => {
     const trimmed = line.trim();
 
-    // Headings
     if (/^###\s/.test(trimmed)) {
       flushList();
       elements.push(
@@ -60,28 +53,24 @@ export default function MarkdownContent({ content = "", className = "" }) {
       return;
     }
 
-    // Unordered list items
     if (/^[-•*]\s/.test(trimmed)) {
       if (listType !== "ul") { flushList(); listType = "ul"; }
       listBuffer.push(trimmed.slice(2));
       return;
     }
 
-    // Ordered list items
     if (/^\d+\.\s/.test(trimmed)) {
       if (listType !== "ol") { flushList(); listType = "ol"; }
       listBuffer.push(trimmed.replace(/^\d+\.\s/, ""));
       return;
     }
 
-    // Empty line = paragraph break
     if (trimmed === "") {
       flushList();
       elements.push(<br key={i} />);
       return;
     }
 
-    // Regular paragraph line
     flushList();
     elements.push(
       <p key={i} style={{ marginBottom: 6 }}

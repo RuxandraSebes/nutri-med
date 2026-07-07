@@ -1,18 +1,11 @@
-"""
-Lightweight caches for RAG: normalized query text + embedding memoization.
-"""
-
 from __future__ import annotations
 
 import functools
 import os
 import re
 
-# ── Query normalization (for cache keys) ────────────────────────────────────
-
 
 def normalize_query_text(text: str) -> str:
-    """Lowercase, strip, collapse whitespace."""
     if not text:
         return ""
     s = text.strip().lower()
@@ -21,11 +14,8 @@ def normalize_query_text(text: str) -> str:
 
 
 def normalize_embed_input(text: str) -> str:
-    """Normalization for embedding cache keys."""
     return normalize_query_text(text)
 
-
-# ── Embedding LRU cache (same text → same vector) ─────────────────────────
 
 _EMBED_CACHE_SIZE = int(os.getenv("RAG_EMBED_CACHE_SIZE", "4096"))
 _USE_EMBED_CACHE = os.getenv("RAG_EMBED_CACHE", "1").strip().lower() in (
@@ -37,11 +27,6 @@ _USE_EMBED_CACHE = os.getenv("RAG_EMBED_CACHE", "1").strip().lower() in (
 
 
 class CachedQueryEmbeddings:
-    """
-    Delegates to HuggingFaceEmbeddings but memoizes embed_query() results.
-    embed_documents() is not cached (ingestion / bulk).
-    """
-
     def __init__(self, inner):
         self._inner = inner
 

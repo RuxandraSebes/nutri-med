@@ -3,7 +3,6 @@ const API_BASE =
     ? import.meta.env.VITE_API_BASE.replace(/\/$/, "")
     : "http://localhost:3000";
 
-// ── Token helpers ─────────────────────────────────────────────────────────────
 const STORAGE_KEY = "nutrimed_token";
 let _token =
   typeof localStorage !== "undefined"
@@ -27,7 +26,6 @@ export function clearAuthToken() {
   }
 }
 
-// ── Core fetch wrapper ────────────────────────────────────────────────────────
 export async function baseFetch(path, options = {}) {
   const url = `${API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
 
@@ -60,8 +58,6 @@ export async function baseFetch(path, options = {}) {
   return data;
 }
 
-// ── Service-specific helpers ──────────────────────────────────────────────────
-// Keep these re-exports so the rest of the app doesn’t need to change.
 export { authApi } from "./authApi.js";
 export { patientApi } from "./patientApi.js";
 export { medicalApi } from "./medicalApi.js";

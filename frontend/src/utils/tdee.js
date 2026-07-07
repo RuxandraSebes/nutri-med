@@ -1,5 +1,3 @@
-/** Mirrors backend/recommendation-service/services/tdee.js */
-
 const ACTIVITY_FACTORS = {
   sedentary: 1.2,
   light: 1.375,
@@ -94,5 +92,6 @@ export function applyGoalToTdee(maintenanceTdee, goal) {
     goal: g,
     maintenance_kcal: maintenanceKcal,
     method: `${base.method || "Mifflin-St Jeor"} → ${g}`,
+    target_source: "specialist_dashboard",
   };
 }

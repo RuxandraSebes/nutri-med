@@ -1,7 +1,3 @@
-/**
- * Rule-based checks before publish (approve). Blocking allergen hits in meal text.
- */
-
 function normalizeList(v) {
   if (!v) return [];
   if (Array.isArray(v)) return v.map(String).map((s) => s.trim()).filter(Boolean);
@@ -39,9 +35,6 @@ function flattenPlanText(meal_matrix) {
   }
 }
 
-/**
- * @returns {{ ok: boolean, errors: string[], warnings: string[] }}
- */
 function validateApprovedPlan(assembledPatient, assembledSpecialist, meal_matrix) {
   const errors = [];
   const warnings = [];

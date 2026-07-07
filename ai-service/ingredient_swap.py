@@ -1,7 +1,3 @@
-"""
-LLM-powered ingredient swap suggestions and global matrix replacement.
-"""
-
 from __future__ import annotations
 
 import json
@@ -13,7 +9,7 @@ from langchain_ollama import ChatOllama
 
 from food_catalog import all_catalog_names, macros_for_portion, resolve_food
 from portion_rules import apply_portion_rules_to_food, round_portion_g
-from rag_service import getPatientContext
+from rag_service import get_patient_context
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +43,11 @@ def _make_swap_llm() -> ChatOllama:
 
 
 async def suggest_ingredient_swaps(patient_id: int, old_name: str) -> dict:
-    """Return 3 LLM alternatives for replacing old_name across the weekly plan."""
     old_name = str(old_name or "").strip()
     if not old_name:
         raise ValueError("oldName is required")
 
-    patient_ctx = await getPatientContext(patient_id)
+    patient_ctx = await get_patient_context(patient_id)
     catalog_sample = ", ".join(all_catalog_names()[:40])
     if len(all_catalog_names()) > 40:
         catalog_sample += ", …"
@@ -116,9 +111,6 @@ Exactly 3 items in alternatives."""
         apply_portion_rules_to_food(food)
         cleaned.append(food)
 
-    while len(cleaned) < 3 and len(alts) > len(cleaned):
-        pass
-
     if len(cleaned) < 1:
         raise ValueError("No valid swap alternatives after filtering")
 
@@ -132,14 +124,12 @@ def _food_matches(old_norm: str, food_name: str) -> bool:
     fn = _norm_name(food_name)
     if fn == old_norm:
         return True
-    # strip parenthetical for catalog names
     short = re.sub(r"\s*\([^)]*\)", "", fn).strip()
     old_short = re.sub(r"\s*\([^)]*\)", "", old_norm).strip()
     return short == old_short or fn == old_short or short == old_norm
 
 
 def _replacement_for_slot(old_food: dict, replacement: dict) -> dict:
-    """Build new food row keeping slot kcal when possible."""
     old_kcal = float(old_food.get("kcal", 0) or 0)
     name = str(replacement.get("name") or "").strip()
     entry = resolve_food(name)
@@ -162,10 +152,6 @@ def _replacement_for_slot(old_food: dict, replacement: dict) -> dict:
 
 
 def apply_ingredient_swap_to_matrix(matrix: dict, old_name: str, replacement: dict) -> dict:
-    """
-    Replace every occurrence of old_name in matrix with replacement (per-slot kcal preserved).
-    Raises ValueError if swap would duplicate a food on the same day.
-    """
     if not isinstance(matrix, dict):
         raise ValueError("matrix must be an object")
     old_norm = _norm_name(old_name)
@@ -230,7 +216,6 @@ def apply_ingredient_swap_to_matrix(matrix: dict, old_name: str, replacement: di
 
 
 def apply_swap_to_meal_matrix(meal_matrix: dict, old_name: str, replacement: dict) -> dict:
-    """Update weekly matrix and refresh flat meals preview (Monday)."""
     if not meal_matrix or not isinstance(meal_matrix, dict):
         raise ValueError("meal_matrix is required")
     weekly = meal_matrix.get("weekly")
@@ -239,7 +224,7 @@ def apply_swap_to_meal_matrix(meal_matrix: dict, old_name: str, replacement: dic
 
     apply_ingredient_swap_to_matrix(weekly, old_name, replacement)
 
-    MEAL_TIMES = {
+    meal_times = {
         "Breakfast": "08:00",
         "Lunch": "13:00",
         "Dinner": "19:00",
@@ -254,7 +239,7 @@ def apply_swap_to_meal_matrix(meal_matrix: dict, old_name: str, replacement: dic
         foods = meal_data.get("foods") or []
         meals.append(
             {
-                "time": MEAL_TIMES.get(meal_name, "00:00"),
+                "time": meal_times.get(meal_name, "00:00"),
                 "name": (foods[0].get("name") if foods else "") or "",
                 "notes": f"{meal_data.get('meal_kcal') or 0} kcal",
                 "foods": foods,

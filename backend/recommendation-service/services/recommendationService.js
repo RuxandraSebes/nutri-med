@@ -1,9 +1,8 @@
 const dietPlanRepository = require("../repositories/dietPlanRepository");
-const { calculateTDEE } = require("./tdee");
+const { calculateTDEE, applyGoalToTdee } = require("./tdee");
 const { validateApprovedPlan } = require("./safetyValidation");
 const { consolidateShoppingList } = require("./shoppingListBuilder");
 const {
-  generateMatrix,
   requestMatrix,
   getMatrixJobStatus,
   suggestIngredientSwaps,
@@ -55,30 +54,14 @@ async function assembleOrchestratorInput(patientId) {
   );
   const specialist = await fetchJson(
     `${MEDICAL_SERVICE_URL}/patients/${patientId}/specialist-object`,
-  ).catch(() => null); // medical data is optional at plan-generation time
+  ).catch(() => null);
 
   return { patient, specialist };
 }
 
-/**
- * Call the Python AI service (async job + poll) for the 7×4 RAG nutrition matrix.
- * Falls back to stub plan if AI service is unavailable.
- */
-async function callRagMatrix(patientId) {
-  // Parallel Ollama batches on CPU often exceed 4–5 minutes; default 20 min.
-  const timeoutMs = Number(process.env.AI_MATRIX_POLL_TIMEOUT_MS || 1200000);
-  const intervalMs = Number(process.env.AI_MATRIX_POLL_INTERVAL_MS || 8000);
-  const maxAttempts = Number(process.env.AI_MATRIX_POLL_MAX_ATTEMPTS || 200);
-  return generateMatrix(patientId, { timeoutMs, intervalMs, maxAttempts });
-}
-
-/**
- * Convert the RAG matrix response into the internal plan shape.
- */
 function ragMatrixToPlanShape(ragResult, patient) {
-  const { matrix, tdee, clinical_notes, foods_used } = ragResult;
+  const { matrix, tdee, clinical_notes, foods_used, validation_warnings } = ragResult;
 
-  // Build a flat meal list for the "meal_matrix.meals" field (first day preview)
   const MEAL_TIMES = {
     Breakfast: "08:00",
     Lunch: "13:00",
@@ -97,7 +80,6 @@ function ragMatrixToPlanShape(ragResult, patient) {
     "Sunday",
   ];
 
-  // Flatten for the meal_matrix.meals array (first day for UI compat)
   const firstDay = matrix[DAYS[0]] || {};
   const meals = Object.entries(firstDay)
     .filter(([key]) => key !== "day_total_kcal")
@@ -108,7 +90,6 @@ function ragMatrixToPlanShape(ragResult, patient) {
       foods: mealData.foods || [],
     }));
 
-  // Build shopping list from foods_used
   const shopping_list = (foods_used || []).map((item) => ({
     item,
     qty: "as needed",
@@ -124,42 +105,12 @@ function ragMatrixToPlanShape(ragResult, patient) {
       context: {
         activity_level: patient?.lifestyle?.activity_level || null,
         tdee: tdee?.kcal || null,
+        validation_warnings: validation_warnings || [],
       },
     },
     shopping_list,
     llm_outputs: null,
     target_macros: tdee || null,
-  };
-}
-
-/**
- * Stub plan fallback (used when AI service is unavailable).
- */
-function buildStubPlan({ patient, specialist }) {
-  const strat = `Nutrition strategy for ${specialist?.primary_disease || specialist?.icd10 || "general"} — pending specialist approval. (Stub: AI service unavailable)`;
-  return {
-    clinical_strategy: strat,
-    meal_matrix: {
-      day: "sample",
-      meals: [
-        { time: "08:00", name: "Oatmeal + yogurt", notes: "placeholder" },
-        { time: "13:00", name: "Chicken salad", notes: "placeholder" },
-        { time: "19:00", name: "Fish + vegetables", notes: "placeholder" },
-      ],
-      context: {
-        activity_level: patient?.lifestyle?.activity_level || null,
-        tdee: null,
-      },
-    },
-    shopping_list: [
-      { item: "oats", qty: "500g" },
-      { item: "yogurt", qty: "500g" },
-      { item: "chicken breast", qty: "400g" },
-      { item: "mixed salad", qty: "2 bags" },
-      { item: "fish", qty: "400g" },
-      { item: "vegetables", qty: "1kg" },
-    ],
-    llm_outputs: null,
   };
 }
 
@@ -179,16 +130,81 @@ function rowToApi(row) {
   };
 }
 
-/**
- * Start AI matrix job only (no polling). Frontend polls GET .../api/ai/matrix-status/:jobId.
- */
-async function startPlanGeneration(patientId, opts = {}) {
-  return requestMatrix(patientId, { target_macros: opts.target_macros });
+function normalizeTargetMacros(merged) {
+  for (const key of ["kcal", "protein_g", "carbs_g", "fat_g"]) {
+    const n = Number(merged[key]);
+    if (!Number.isFinite(n)) {
+      const err = new Error(`Invalid target_macros: missing or invalid ${key}`);
+      err.status = 400;
+      throw err;
+    }
+    merged[key] = Math.round(n);
+  }
+  if (merged.bmr != null) merged.bmr = Math.round(Number(merged.bmr));
+  if (merged.activity_factor != null) {
+    merged.activity_factor = Number(merged.activity_factor);
+  }
+  if (merged.maintenance_kcal != null) {
+    merged.maintenance_kcal = Math.round(Number(merged.maintenance_kcal));
+  }
+  return merged;
 }
 
-/**
- * After matrix job is done, persist diet plan from AI job result.
- */
+async function resolveTargetMacrosForAi(patientId, opts = {}) {
+  const assembled = await assembleOrchestratorInput(patientId);
+  const computed = calculateTDEE(assembled.patient);
+  const incoming =
+    opts.target_macros && typeof opts.target_macros === "object"
+      ? opts.target_macros
+      : {};
+
+  const hasDashboardGoal =
+    incoming.goal === "loss" ||
+    incoming.goal === "maintenance" ||
+    incoming.goal === "gain";
+  const hasDashboardKcal =
+    incoming.kcal != null && Number(incoming.kcal) !== Number(computed.kcal);
+  const fromDashboard =
+    incoming.target_source === "specialist_dashboard" ||
+    hasDashboardGoal ||
+    hasDashboardKcal;
+
+  let merged;
+  if (fromDashboard) {
+    if (hasDashboardGoal && incoming.kcal == null) {
+      merged = applyGoalToTdee(computed, incoming.goal);
+    } else {
+      merged = {
+        ...computed,
+        ...incoming,
+        maintenance_kcal:
+          incoming.maintenance_kcal != null
+            ? Number(incoming.maintenance_kcal)
+            : computed.kcal,
+        goal: incoming.goal || "maintenance",
+        target_source: "specialist_dashboard",
+      };
+    }
+  } else {
+    merged = {
+      ...computed,
+      ...incoming,
+      target_source: incoming.target_source || "backend_tdee.js",
+    };
+  }
+
+  if (!merged.method) {
+    merged.method = "Mifflin-St Jeor × activity factor (backend tdee.js)";
+  }
+
+  return normalizeTargetMacros(merged);
+}
+
+async function startPlanGeneration(patientId, opts = {}) {
+  const target_macros = await resolveTargetMacrosForAi(patientId, opts);
+  return requestMatrix(patientId, { target_macros });
+}
+
 async function completePlanFromJob(patientId, jobId, opts = {}) {
   const statusBody = await getMatrixJobStatus(jobId);
 
@@ -235,7 +251,13 @@ async function completePlanFromJob(patientId, jobId, opts = {}) {
     throw err;
   }
 
-  const tdee = calculateTDEE(assembled.patient);
+  const persistedTargets = await resolveTargetMacrosForAi(patientId, {
+    target_macros:
+      opts.target_macros ||
+      plan.target_macros ||
+      ragResult.tdee ||
+      null,
+  });
 
   const created = await dietPlanRepository.createPlan({
     patient_id: patientId,
@@ -245,7 +267,7 @@ async function completePlanFromJob(patientId, jobId, opts = {}) {
     meal_matrix: plan.meal_matrix,
     shopping_list: plan.shopping_list,
     llm_outputs: plan.llm_outputs,
-    target_macros: plan.target_macros || tdee,
+    target_macros: persistedTargets,
   });
 
   return {
@@ -257,67 +279,7 @@ async function completePlanFromJob(patientId, jobId, opts = {}) {
       meal_matrix: plan.meal_matrix,
       shopping_list: plan.shopping_list,
       llm_outputs: plan.llm_outputs,
-      target_macros: plan.target_macros || tdee,
-    },
-  };
-}
-
-async function generateAndStorePlan(patientId, opts = {}) {
-  await dietPlanRepository.deletePendingPlansForPatient(patientId);
-
-  const assembled = await assembleOrchestratorInput(patientId);
-
-  let plan;
-  let ragResult = null;
-
-  // ── Try RAG first ──────────────────────────────────────────────────────────
-  try {
-    ragResult = await callRagMatrix(patientId);
-    plan = ragMatrixToPlanShape(ragResult, assembled.patient);
-    console.log(
-      `[recommendation] RAG matrix generated for patientId=${patientId}`,
-    );
-  } catch (ragErr) {
-    console.warn(
-      `[recommendation] RAG matrix failed, falling back to stub plan: ${ragErr.message}`,
-    );
-    // ── Fallback: stub plan ──────────────────────────────────────────────────
-    plan = buildStubPlan(assembled);
-
-    // Compute TDEE for context even in stub mode
-    const tdee = calculateTDEE(assembled.patient);
-    plan.meal_matrix.context = {
-      ...plan.meal_matrix.context,
-      tdee: tdee.kcal,
-    };
-  }
-
-  // ── Always compute TDEE from DB fields for target_macros ──────────────────
-  const tdee = calculateTDEE(assembled.patient);
-
-  const created = await dietPlanRepository.createPlan({
-    patient_id: patientId,
-    specialist_id: opts.specialist_id ?? null,
-    status: "pending",
-    clinical_strategy: plan.clinical_strategy,
-    meal_matrix: plan.meal_matrix,
-    shopping_list: plan.shopping_list,
-    llm_outputs: plan.llm_outputs,
-    target_macros: plan.target_macros || tdee,
-  });
-
-  return {
-    plan_id: created.id,
-    input: assembled,
-    rag: ragResult
-      ? { status: "success", tdee: ragResult.tdee }
-      : { status: "stub_fallback" },
-    plan: {
-      clinical_strategy: plan.clinical_strategy,
-      meal_matrix: plan.meal_matrix,
-      shopping_list: plan.shopping_list,
-      llm_outputs: plan.llm_outputs,
-      target_macros: plan.target_macros || tdee,
+      target_macros: persistedTargets,
     },
   };
 }
@@ -344,10 +306,12 @@ async function approveLatestPlan(patientId, specialistUserId, edited = {}) {
     throw err;
   }
 
-  const assembled = await assembleOrchestratorInput(patientId);
-  const target_macros = calculateTDEE(assembled.patient);
-
   const meal_matrix = edited.meal_matrix ?? row.meal_matrix;
+  const assembled = await assembleOrchestratorInput(patientId);
+  const target_macros =
+    edited.target_macros ??
+    row.target_macros ??
+    (await resolveTargetMacrosForAi(patientId, {}));
   const safety = validateApprovedPlan(
     assembled.patient,
     assembled.specialist,
@@ -470,9 +434,9 @@ async function applyPlanIngredientSwap(patientId, oldName, replacement) {
 
 module.exports = {
   assembleOrchestratorInput,
+  resolveTargetMacrosForAi,
   startPlanGeneration,
   completePlanFromJob,
-  generateAndStorePlan,
   getLatestPlan,
   approveLatestPlan,
   updateDraftPlan,

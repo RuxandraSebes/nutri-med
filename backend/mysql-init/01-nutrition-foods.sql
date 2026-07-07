@@ -1,4 +1,3 @@
--- Reserved table for Stage 3 mapping (CSV imports / tooling). Safe if empty.
 CREATE TABLE IF NOT EXISTS nutrition_foods (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(512) NOT NULL,

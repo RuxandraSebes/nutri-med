@@ -1,7 +1,3 @@
-"""
-Honest stage timings for the RAG / matrix pipeline (logs only; no behavior change).
-"""
-
 from __future__ import annotations
 
 import logging
@@ -14,7 +10,6 @@ T = TypeVar("T")
 
 
 def timed_sync(label: str, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-    """Time a synchronous callable and log duration in ms."""
     start = time.perf_counter()
     try:
         return fn(*args, **kwargs)
@@ -24,7 +19,6 @@ def timed_sync(label: str, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T
 
 
 async def timed_coro(label: str, coro: Awaitable[T]) -> T:
-    """Time an awaitable (already-created coroutine) and log duration in ms."""
     start = time.perf_counter()
     try:
         return await coro

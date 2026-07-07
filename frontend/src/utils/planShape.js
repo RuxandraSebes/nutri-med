@@ -1,7 +1,3 @@
-/**
- * Normalize recommendation API responses into the nested shape used by
- * SpecialistDashboard / MealMatrix (completePlan returns nested; GET /plan is flat).
- */
 export function normalizePlanForDashboard(raw) {
   if (!raw) return null;
   if (raw.plan?.meal_matrix != null || raw.plan?.clinical_strategy != null) {

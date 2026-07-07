@@ -1,8 +1,5 @@
 import { baseFetch } from "./baseFetch.js";
 
-/**
- * Poll gateway → AI matrix-status until done or error (frontend-owned; avoids long gateway POST).
- */
 export async function pollUntilMatrixDone(jobId, options = {}) {
   const intervalMs = options.intervalMs ?? 8000;
   const timeoutMs = options.timeoutMs ?? 1200000;
@@ -32,13 +29,11 @@ export async function pollUntilMatrixDone(jobId, options = {}) {
 }
 
 export const recommendationApi = {
-  /** Starts AI job — returns 202 + jobId + pollUrl (see pollUntilMatrixDone + completePlan). */
   generatePlan: (patientId, payload) =>
     baseFetch(`/api/recommendations/patients/${patientId}/plan`, {
       method: "POST",
       body: payload || {},
     }),
-  /** Persist draft plan after matrix job finished (server reads result from AI by jobId). */
   completePlan: (patientId, payload) =>
     baseFetch(`/api/recommendations/patients/${patientId}/plan/complete`, {
       method: "POST",
