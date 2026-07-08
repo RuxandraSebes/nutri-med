@@ -29,15 +29,21 @@ function toPatientObject(row) {
   const demo = {
     age: row.age ?? pd.demographics?.age ?? null,
     gender: row.gender ?? pd.demographics?.gender ?? null,
-    height_cm: row.height_cm != null ? Number(row.height_cm) : pd.demographics?.height_cm ?? null,
-    weight_kg: row.weight_kg != null ? Number(row.weight_kg) : pd.demographics?.weight_kg ?? null,
-    bmi:
-      pd.demographics?.bmi ??
-      computeBmi(row.height_cm, row.weight_kg),
+    height_cm:
+      row.height_cm != null
+        ? Number(row.height_cm)
+        : (pd.demographics?.height_cm ?? null),
+    weight_kg:
+      row.weight_kg != null
+        ? Number(row.weight_kg)
+        : (pd.demographics?.weight_kg ?? null),
+    bmi: pd.demographics?.bmi ?? computeBmi(row.height_cm, row.weight_kg),
   };
   const lifestyle = {
-    activity_level: row.activity_level ?? pd.lifestyle?.physical_activity_level ?? null,
-    preferred_cuisine: row.preferred_cuisine ?? pd.preferences?.preferred_cuisine ?? null,
+    activity_level:
+      row.activity_level ?? pd.lifestyle?.physical_activity_level ?? null,
+    preferred_cuisine:
+      row.preferred_cuisine ?? pd.preferences?.preferred_cuisine ?? null,
     ...pd.lifestyle,
     physical_activity_level:
       pd.lifestyle?.physical_activity_level ?? row.activity_level ?? null,
@@ -118,7 +124,7 @@ function mergeProfilePayload(row, body) {
 async function updateMyProfile(userId, body) {
   const row = await patientRepository.getByUserId(userId);
   if (!row) {
-    const err = new Error("Patient profile not found — call bootstrap first");
+    const err = new Error("Patient profile not found - call bootstrap first");
     err.status = 404;
     throw err;
   }

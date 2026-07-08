@@ -9,8 +9,14 @@ const PORT = process.env.PORT || 3000;
 const corsOrigin = process.env.CORS_ORIGIN || "*";
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", corsOrigin);
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, Accept",
+  );
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
   }
@@ -28,7 +34,9 @@ const services = {
   auth: process.env.AUTH_SERVICE_URL || "http://localhost:3010",
   ai: process.env.AI_SERVICE_URL || "http://localhost:5001",
 };
-const PROXY_TIMEOUT_MS = Number(process.env.GATEWAY_PROXY_TIMEOUT_MS || 1200000);
+const PROXY_TIMEOUT_MS = Number(
+  process.env.GATEWAY_PROXY_TIMEOUT_MS || 1200000,
+);
 
 const proxyDispatcher = new Agent({
   headersTimeout: PROXY_TIMEOUT_MS,
@@ -46,7 +54,7 @@ function proxyFetchErrorDetail(err) {
     parts.push(`cause: ${String(c.message)}`);
     if (c.code) parts.push(`code: ${c.code}`);
   }
-  return parts.filter(Boolean).join(" — ") || String(err);
+  return parts.filter(Boolean).join(" - ") || String(err);
 }
 
 function filterRequestHeaders(headers) {
@@ -150,7 +158,10 @@ app.use(
 );
 app.use(
   "/api/patients",
-  createFetchProxy({ prefix: "/api/patients", targetBaseUrl: services.patient }),
+  createFetchProxy({
+    prefix: "/api/patients",
+    targetBaseUrl: services.patient,
+  }),
 );
 app.use(
   "/api/medical",

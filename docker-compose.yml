@@ -128,7 +128,7 @@ services:
       [
         "sh",
         "-c",
-        'sleep 15 && (ollama pull llama3.2:3b || echo "ollama-init: pull failed — run: docker compose exec ollama ollama pull llama3.2:3b")',
+        'sleep 15 && (ollama pull llama3.2:3b || echo "ollama-init: pull failed - run: docker compose exec ollama ollama pull llama3.2:3b")',
       ]
 
   ai-service:

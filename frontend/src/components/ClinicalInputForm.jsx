@@ -298,7 +298,7 @@ export default function ClinicalInputForm({
               <MetricCard
                 label="Systolic BP"
                 unit="mmHg"
-                normalRange="90–120"
+                normalRange="90-120"
                 value={d.systolic}
                 onChange={(e) => set({ systolic: e.target.value })}
                 placeholder="120"
@@ -306,7 +306,7 @@ export default function ClinicalInputForm({
               <MetricCard
                 label="Diastolic BP"
                 unit="mmHg"
-                normalRange="60–80"
+                normalRange="60-80"
                 value={d.diastolic}
                 onChange={(e) => set({ diastolic: e.target.value })}
                 placeholder="80"
@@ -314,7 +314,7 @@ export default function ClinicalInputForm({
               <MetricCard
                 label="Fasting glucose"
                 unit="mg/dL"
-                normalRange="70–99"
+                normalRange="70-99"
                 value={d.glucose}
                 onChange={(e) => set({ glucose: e.target.value })}
                 placeholder="92"

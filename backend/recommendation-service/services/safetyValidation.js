@@ -1,6 +1,10 @@
 function normalizeList(v) {
   if (!v) return [];
-  if (Array.isArray(v)) return v.map(String).map((s) => s.trim()).filter(Boolean);
+  if (Array.isArray(v))
+    return v
+      .map(String)
+      .map((s) => s.trim())
+      .filter(Boolean);
   return [];
 }
 
@@ -35,7 +39,11 @@ function flattenPlanText(meal_matrix) {
   }
 }
 
-function validateApprovedPlan(assembledPatient, assembledSpecialist, meal_matrix) {
+function validateApprovedPlan(
+  assembledPatient,
+  assembledSpecialist,
+  meal_matrix,
+) {
   const errors = [];
   const warnings = [];
   const blob = flattenPlanText(meal_matrix);
@@ -45,7 +53,7 @@ function validateApprovedPlan(assembledPatient, assembledSpecialist, meal_matrix
     const needle = a.toLowerCase();
     if (needle.length >= 2 && blob.includes(needle)) {
       errors.push(
-        `Potential allergen / aversion "${a}" appears in the meal plan text — remove or substitute before publishing.`,
+        `Potential allergen / aversion "${a}" appears in the meal plan text - remove or substitute before publishing.`,
       );
     }
   }

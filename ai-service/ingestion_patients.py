@@ -62,7 +62,7 @@ def main():
         collection_name=COLLECTION,
     )
 
-    print(f"✅ Succes! S-au vectorizat {len(patient_docs)} profile în {PATH_DB} (colecție: {COLLECTION})")
+    print(f"Succes! S-au vectorizat {len(patient_docs)} profile în {PATH_DB} (colecție: {COLLECTION})")
 
 
 if __name__ == "__main__":

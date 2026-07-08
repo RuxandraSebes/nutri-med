@@ -1,22 +1,15 @@
 import { useState } from "react";
-import { roundPortionG } from "../utils/portionRules.js";
-
-function Icon({ d, size = 15, stroke = "currentColor", sw = 2 }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke={stroke}
-      strokeWidth={sw}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d={d} />
-    </svg>
-  );
-}
+import Icon from "./UI/Icon.jsx";
+import Spinner from "./UI/Spinner.jsx";
+import {
+  mealKeyFor,
+  getMealBlock,
+  parseNum,
+  StatusBadge,
+  Btn,
+  MacroBadges,
+  FoodRow,
+} from "./MealMatrix.parts.jsx";
 
 const I = {
   check: "M20 6 9 17l-5-5",
@@ -52,178 +45,6 @@ const MEAL_COLOR = {
   Lunch: { bg: "#f0fdf4", color: "#16a34a", border: "#bbf7d0" },
   Dinner: { bg: "#fffbeb", color: "#d97706", border: "#fde68a" },
 };
-
-function mealKeyFor(dayData, meal) {
-  if (!dayData) return meal;
-  if (dayData[meal]) return meal;
-  if (meal === "Snack" && dayData["Morning Snack"]) return "Morning Snack";
-  return meal;
-}
-
-function getMealBlock(dayData, meal) {
-  const key = mealKeyFor(dayData, meal);
-  return dayData?.[key] || { foods: [] };
-}
-
-function parseNum(raw) {
-  if (raw === "" || raw == null) return 0;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function Spinner({ size = 13 }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      className="sd-spin"
-    >
-      <circle cx="12" cy="12" r="10" strokeOpacity=".2" />
-      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function StatusBadge({ status }) {
-  const cfg = {
-    pending: { cls: "sd-badge-amber", label: "Pending Review", dot: "#f59e0b" },
-    approved: { cls: "sd-badge-green", label: "Approved", dot: "#22c55e" },
-    rejected: { cls: "sd-badge-red", label: "Rejected", dot: "#ef4444" },
-    modify: { cls: "sd-badge-amber", label: "Modify", dot: "#f59e0b" },
-  }[status] ?? { cls: "sd-badge-gray", label: status, dot: "#94a3b8" };
-
-  return (
-    <span className={`sd-badge ${cfg.cls}`}>
-      <span className="sd-badge-dot" style={{ background: cfg.dot }} />
-      {cfg.label}
-    </span>
-  );
-}
-
-function Btn({ children, variant = "secondary", disabled, onClick, loading }) {
-  const v =
-    {
-      secondary: "sd-btn-secondary",
-      outline: "sd-btn-ghost",
-      destructive: "sd-btn-danger",
-      primary: "sd-btn-primary",
-      green: "sd-btn-green",
-      ghost: "sd-btn-ghost",
-      warning: "sd-btn-warning",
-      danger: "sd-btn-danger",
-    }[variant] ?? "sd-btn-secondary";
-
-  return (
-    <button
-      type="button"
-      disabled={disabled || loading}
-      onClick={onClick}
-      className={`sd-btn sd-btn-sm ${v}`}
-    >
-      {loading ? <Spinner /> : null}
-      {children}
-    </button>
-  );
-}
-
-function MacroBadges({ p, c, f, kcal }) {
-  const fmt = (v) => (v != null && v !== "" ? Number(v).toFixed(1) : "—");
-  const fmtK = (v) => (v != null && v !== "" ? Number(v).toFixed(0) : "—");
-  return (
-    <div className="sd-macro-badges">
-      <span className="sd-macro-chip sd-macro-p">P {fmt(p)}g</span>
-      <span className="sd-macro-chip sd-macro-c">C {fmt(c)}g</span>
-      <span className="sd-macro-chip sd-macro-f">F {fmt(f)}g</span>
-      <span className="sd-macro-chip sd-macro-kcal">{fmtK(kcal)} kcal</span>
-    </div>
-  );
-}
-
-function FoodRow({ day, meal, index, food, onPatchFood }) {
-  return (
-    <div className="sd-food-row">
-      <div
-        className="sd-food-grid-2"
-        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}
-      >
-        <div style={{ gridColumn: "1/-1" }}>
-          <label className="sd-label">Food name</label>
-          <input
-            className="sd-input"
-            value={food.name ?? ""}
-            onChange={(e) =>
-              onPatchFood(day, meal, index, "name", e.target.value)
-            }
-          />
-        </div>
-        <div>
-          <label className="sd-label">Portion (g)</label>
-          <input
-            className="sd-input"
-            inputMode="decimal"
-            value={food.portion_g ?? ""}
-            onChange={(e) =>
-              onPatchFood(day, meal, index, "portion_g", e.target.value)
-            }
-            onBlur={(e) => {
-              const rounded = roundPortionG(food.name, e.target.value);
-              if (rounded && rounded !== Number(food.portion_g)) {
-                onPatchFood(day, meal, index, "portion_g", String(rounded));
-              }
-            }}
-          />
-        </div>
-        <div>
-          <label className="sd-label">Note</label>
-          <input
-            className="sd-input"
-            value={food.notes ?? food.note ?? ""}
-            onChange={(e) =>
-              onPatchFood(day, meal, index, "notes", e.target.value)
-            }
-          />
-        </div>
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4,1fr)",
-          gap: 7,
-          marginTop: 7,
-        }}
-      >
-        {[
-          { key: "protein_g", label: "Protein (g)" },
-          { key: "carbs_g", label: "Carbs (g)" },
-          { key: "fat_g", label: "Fat (g)" },
-          { key: "kcal", label: "Kcal" },
-        ].map(({ key, label }) => (
-          <div key={key}>
-            <label className="sd-label">{label}</label>
-            <input
-              className="sd-input"
-              inputMode="decimal"
-              value={food[key] ?? ""}
-              onChange={(e) =>
-                onPatchFood(day, meal, index, key, e.target.value)
-              }
-            />
-          </div>
-        ))}
-      </div>
-      <MacroBadges
-        p={food.protein_g}
-        c={food.carbs_g}
-        f={food.fat_g}
-        kcal={food.kcal}
-      />
-    </div>
-  );
-}
 
 export default function MealMatrix({
   dashboardData,
@@ -352,7 +173,7 @@ export default function MealMatrix({
     return (
       <div className="sd-empty">
         <div className="sd-empty-icon">
-          <Icon d={I.calendar} size={26} stroke="#94a3b8" sw={1.5} />
+          <Icon d={I.calendar} size={26} stroke="#94a3b8" strokeWidth={1.5} />
         </div>
         <div className="sd-empty-title">
           {selectedRecordId ? "No meal plan yet" : "Select a patient"}
@@ -396,7 +217,7 @@ export default function MealMatrix({
             <div
               style={{ fontSize: 14, fontWeight: 700, color: "var(--sd-text)" }}
             >
-              Plan #{plan.plan_id ?? plan.id} — specialist review
+              Plan #{plan.plan_id ?? plan.id} - specialist review
             </div>
             <div className="sd-sticky-plan-meta">
               {patientLabel} (record #{selectedRecordId})
@@ -434,7 +255,7 @@ export default function MealMatrix({
               onClick={() => decide("approve")}
               disabled={!!decision || isPublished}
             >
-              <Icon d={I.check} size={13} stroke="currentColor" sw={2.5} />
+              <Icon d={I.check} size={13} stroke="currentColor" strokeWidth={2.5} />
               {isPublished ? "Published" : "Approve & publish"}
             </Btn>
           </div>
@@ -485,7 +306,9 @@ export default function MealMatrix({
               </div>
             </div>
             <div className="sd-tdee-kcal-hero">
-              <span className="sd-tdee-kcal-num">{inner.target_macros.kcal}</span>
+              <span className="sd-tdee-kcal-num">
+                {inner.target_macros.kcal}
+              </span>
               <span className="sd-tdee-kcal-unit">kcal / day</span>
             </div>
           </div>
@@ -665,7 +488,7 @@ export default function MealMatrix({
                               padding: "4px 0",
                             }}
                           >
-                            No foods listed — regenerate for data.
+                            No foods listed - regenerate for data.
                           </p>
                         )}
                       </div>
@@ -679,7 +502,7 @@ export default function MealMatrix({
       ) : mm?.meals?.length ? (
         <div>
           <div className="sd-flat-warning">
-            Full weekly matrix unavailable — editing flat meal preview.
+            Full weekly matrix unavailable - editing flat meal preview.
             Regenerate for the 7-day grid.
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -791,7 +614,7 @@ export default function MealMatrix({
       ) : (
         <div className="sd-empty">
           <div className="sd-empty-icon">
-            <Icon d={I.calendar} size={26} stroke="#94a3b8" sw={1.5} />
+            <Icon d={I.calendar} size={26} stroke="#94a3b8" strokeWidth={1.5} />
           </div>
           <div className="sd-empty-title">No meal rows in this draft</div>
           <div className="sd-empty-sub">

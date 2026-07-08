@@ -33,9 +33,9 @@ if os.path.exists("./db_nutritie"):
         persist_directory="./db_nutritie",
         embedding_function=embeddings,
     )
-    logger.info("✅ db_nutritie loaded.")
+    logger.info("db_nutritie loaded.")
 else:
-    logger.warning("⚠️  db_nutritie not found — run ingestion.py first.")
+    logger.warning("db_nutritie not found - run ingestion.py first.")
 
 if os.path.exists("./db_pacienti"):
     db_pacienti = Chroma(
@@ -43,15 +43,15 @@ if os.path.exists("./db_pacienti"):
         embedding_function=embeddings,
         collection_name="patient_history",
     )
-    logger.info("✅ db_pacienti loaded.")
+    logger.info("db_pacienti loaded.")
 else:
-    logger.warning("⚠️  db_pacienti not found — run ingestion_patients.py first.")
+    logger.warning(" db_pacienti not found - run ingestion_patients.py first.")
 
 try:
     embeddings.embed_query("nutrition warm-up")
-    logger.info("✅ Embedding model warmed up (embed_query).")
+    logger.info("Embedding model warmed up (embed_query).")
 except Exception as exc:
-    logger.warning("⚠️  Embedding warm-up failed: %s", exc)
+    logger.warning("Embedding warm-up failed: %s", exc)
 
 llm = ChatOllama(
     model=os.getenv("OLLAMA_MODEL", "llama3.2:3b"),
@@ -66,7 +66,7 @@ INSTRUCȚIUNI:
 - Dacă contextul conține informații parțiale, completează cu cunoștințele tale medicale generale.
 - Dacă contextul este irelevant pentru întrebare, răspunde din cunoștințele tale, dar menționează
   că nu ai date specifice din baza de date pentru această întrebare.
-- Nu inventa valori nutriționale exacte dacă nu le ai — estimează și specifică că sunt estimări.
+- Nu inventa valori nutriționale exacte dacă nu le ai - estimează și specifică că sunt estimări.
 - Nu răspunde niciodată cu "nu știu" dacă poți oferi un răspuns medical general util.
 
 Context din baza de date:
@@ -195,7 +195,7 @@ def analyze_journal():
         "You are a professional nutrition auditor. "
         "Use PATIENT and SPECIALIST context to tailor sodium/sugar emphasis, calories, and allergens. "
         "Analyze the food journal and return a response following this strict format:\n"
-        "1. SCORE: Rating 1–10 (nutritional density + glycemic appropriateness for this patient).\n"
+        "1. SCORE: Rating 1-10 (nutritional density + glycemic appropriateness for this patient).\n"
         "2. ANALYSIS: One short sentence explaining the score using the clinical context where relevant.\n"
         "3. IMPROVED VERSION: Breakfast, lunch, dinner, and two snacks that address gaps while respecting "
         "constraints implied by the contexts.\n\n"
@@ -238,7 +238,7 @@ def generate_matrix():
             return (
                 jsonify(
                     {
-                        "error": f"targetMacros.{key} is required — "
+                        "error": f"targetMacros.{key} is required - "
                         "TDEE must be computed by recommendation-service (tdee.js)",
                     }
                 ),

@@ -157,18 +157,18 @@ def main():
         df.columns = [c.strip().lower() for c in df.columns]
 
         if "patient_id" in df.columns or "chronic_disease" in df.columns:
-            print(f"  ⚠️  Skipping patient dataset: {f}")
+            print(f"  Skipping patient dataset: {f}")
             continue
 
         if "food" not in df.columns:
-            print(f"  ⚠️  Skipping — no 'food' column found in: {f}")
+            print(f"  Skipping - no 'food' column found in: {f}")
             continue
 
         for _, row in df.iterrows():
             doc = build_enriched_document(row.to_dict(), f)
             all_docs.append(doc)
 
-        print(f"  ✅ {len(df)} foods loaded from {f}")
+        print(f"  {len(df)} foods loaded from {f}")
 
     if not all_docs:
         print("No documents to ingest. Check your datasets folder.")
@@ -184,7 +184,7 @@ def main():
         persist_directory=PATH_DB,
     )
 
-    print(f"✅ Succes! Baza de date salvată în: {PATH_DB} ({len(all_docs)} documente)")
+    print(f"Succes! Baza de date salvată în: {PATH_DB} ({len(all_docs)} documente)")
 
 
 if __name__ == "__main__":

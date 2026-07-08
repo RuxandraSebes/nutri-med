@@ -84,7 +84,7 @@ export default function IngredientSwapModal({
 
         {loading && (
           <p style={{ fontSize: 13.5, color: "var(--sd-text-3, var(--pd-text-3))" }}>
-            AI is suggesting alternatives… this can take 1–2 minutes on first run.
+            AI is suggesting alternatives, this can take 1-2 minutes on first run.
           </p>
         )}
         {error && (
