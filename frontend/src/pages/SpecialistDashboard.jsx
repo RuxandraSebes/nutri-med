@@ -442,9 +442,6 @@ export default function SpecialistDashboard() {
       <div className="sd-page-header">
         <div>
           <h1 className="sd-page-title">Specialist Dashboard</h1>
-          <p className="sd-page-subtitle">
-            Enter clinical data · generate AI meal matrix · review and publish
-          </p>
         </div>
       </div>
 

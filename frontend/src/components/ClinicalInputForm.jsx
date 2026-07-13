@@ -218,9 +218,7 @@ export default function ClinicalInputForm({
           </div>
           <div style={{ flex: 1 }}>
             <div className="sd-card-title">Clinical input</div>
-            <div className="sd-card-subtitle">
-              Complete all sections · AI generates meal matrix on submit
-            </div>
+            <div className="sd-card-subtitle">Complete all sections</div>
           </div>
           {!d.selectedRecordId && (
             <span
@@ -246,7 +244,7 @@ export default function ClinicalInputForm({
         <div className="sd-card-body">
           <Section iconPath={ICONS.diag} title="Diagnosis">
             <div>
-              <label className="sd-label">Primary disease / ICD-10 label</label>
+              <label className="sd-label">Primary disease</label>
               <input
                 className="sd-input"
                 value={d.primaryDisease}
