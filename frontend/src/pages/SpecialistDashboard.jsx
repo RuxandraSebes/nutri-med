@@ -64,7 +64,6 @@ export default function SpecialistDashboard() {
     result: null,
     plan: null,
     decision: null,
-    journalReview: null,
   });
 
   const [tdeeGoal, setTdeeGoal] = useState("maintenance");
@@ -82,8 +81,6 @@ export default function SpecialistDashboard() {
   const [approveSafetyError, setApproveSafetyError] = useState("");
   const [matrixJobInfo, setMatrixJobInfo] = useState(null);
   const [matrixElapsedSec, setMatrixElapsedSec] = useState(0);
-  const [journalBusy, setJournalBusy] = useState(false);
-  const [journalError, setJournalError] = useState("");
   const [planLoading, setPlanLoading] = useState(false);
 
   const runSearch = useCallback(async () => {
@@ -426,7 +423,6 @@ export default function SpecialistDashboard() {
       setDashboardData((d) => ({
         ...d,
         plan: null,
-        journalReview: null,
         decision: null,
       }));
       setPlanActionMsg("Draft discarded.");
@@ -495,14 +491,7 @@ export default function SpecialistDashboard() {
 
       {activeTab === "insights" && (
         <div className="sd-tab-content">
-          <PatientInsightView
-            dashboardData={dashboardData}
-            setDashboardData={setDashboardData}
-            journalBusy={journalBusy}
-            setJournalBusy={setJournalBusy}
-            journalError={journalError}
-            setJournalError={setJournalError}
-          />
+          <PatientInsightView dashboardData={dashboardData} />
         </div>
       )}
 

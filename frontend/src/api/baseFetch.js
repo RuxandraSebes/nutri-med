@@ -63,3 +63,4 @@ export { patientApi } from "./patientApi.js";
 export { medicalApi } from "./medicalApi.js";
 export { recommendationApi } from "./recommendationApi.js";
 export { aiApi } from "./aiApi.js";
+export { journalApi } from "./journalApi.js";

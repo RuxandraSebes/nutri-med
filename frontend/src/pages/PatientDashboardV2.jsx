@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { patientApi, recommendationApi } from "../api/baseFetch.js";
+import { patientApi, recommendationApi, journalApi } from "../api/baseFetch.js";
 import IngredientSwapModal from "../components/IngredientSwapModal.jsx";
 import MarkdownContent from "../components/UI/MarkdownContent.jsx";
 import Icon from "../components/UI/Icon.jsx";
@@ -14,6 +14,7 @@ import {
   MealTimelineRow,
   DayCard,
   ShoppingList,
+  JournalReviewCard,
   EmptyState,
 } from "./PatientDashboardV2.parts.jsx";
 
@@ -35,6 +36,8 @@ export default function PatientDashboardV2() {
   const [diaryMsg, setDiaryMsg] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [swapMsg, setSwapMsg] = useState("");
+  const [journalReview, setJournalReview] = useState(null);
+  const [journalError, setJournalError] = useState("");
 
   const recordId = profile?.record_id;
   const isApproved = plan?.status === "approved";
@@ -67,6 +70,12 @@ export default function PatientDashboardV2() {
             if (!cancelled) setPlan(p);
           } catch (pe) {
             if (!cancelled && pe.status !== 404) setError(pe.message);
+          }
+          try {
+            const jr = await journalApi.getLatestReview(me.record_id);
+            if (!cancelled) setJournalReview(jr);
+          } catch (je) {
+            if (!cancelled && je.status !== 404) setJournalError(je.message);
           }
         }
       } catch (e) {
@@ -229,8 +238,9 @@ export default function PatientDashboardV2() {
             </div>
             <div className="pd-diary-card">
               <p className="pd-diary-hint">
-                Log everything you've eaten today. Your specialist reviews this
-                during plan creation.
+                Log everything you've eaten today. Your specialist can review
+                this separately and leave you a score and per-food notes
+                below.
               </p>
               <textarea
                 className="pd-diary-textarea"
@@ -250,11 +260,30 @@ export default function PatientDashboardV2() {
                   Save diary
                 </Btn>
                 {diaryMsg && <span className="pd-diary-saved">{diaryMsg}</span>}
-                <span className="pd-diary-hint-small">
-                  Your specialist reviews this entry.
-                </span>
               </div>
             </div>
+          </section>
+
+          <section className="pd-section">
+            <div className="pd-section-header">
+              <Icon d={Icons.bolt} size={16} stroke="#10b981" />
+              <h2 className="pd-section-title">Journal review</h2>
+            </div>
+            {journalError && (
+              <div className="pd-alert pd-alert-error">
+                <Icon d={Icons.alert} size={15} />
+                {journalError}
+              </div>
+            )}
+            {journalReview?.status === "approved" ? (
+              <JournalReviewCard review={journalReview} />
+            ) : (
+              <EmptyState
+                icon={Icons.note}
+                title="No journal review yet"
+                subtitle="Your specialist hasn't reviewed your food diary yet"
+              />
+            )}
           </section>
         </div>
       )}

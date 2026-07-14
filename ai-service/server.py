@@ -59,6 +59,20 @@ llm = ChatOllama(
     base_url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
 )
 
+_journal_llm = None
+
+
+def _get_journal_llm():
+    global _journal_llm
+    if _journal_llm is None:
+        _journal_llm = ChatOllama(
+            model=os.getenv("OLLAMA_MODEL", "llama3.2:3b"),
+            temperature=0.2,
+            base_url=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
+            format="json",
+        )
+    return _journal_llm
+
 QA_TEMPLATE = """Ești un asistent medical expert în nutriție.
 
 INSTRUCȚIUNI:
@@ -192,26 +206,38 @@ def analyze_journal():
             )[:2000]
 
     system_prompt = (
-        "You are a professional nutrition auditor. "
+        "You are a clinical nutrition auditor. "
         "Use PATIENT and SPECIALIST context to tailor sodium/sugar emphasis, calories, and allergens. "
-        "Analyze the food journal and return a response following this strict format:\n"
-        "1. SCORE: Rating 1-10 (nutritional density + glycemic appropriateness for this patient).\n"
-        "2. ANALYSIS: One short sentence explaining the score using the clinical context where relevant.\n"
-        "3. IMPROVED VERSION: Breakfast, lunch, dinner, and two snacks that address gaps while respecting "
-        "constraints implied by the contexts.\n\n"
+        "Analyze the food journal entry and respond with STRICT JSON only, no prose, no markdown fences, "
+        "matching exactly this shape:\n"
+        '{"score": <integer 1-10>, "food_notes": [{"food": "<food or meal item as written in the journal>", '
+        '"note": "<one short clinical sentence>"}]}\n\n'
         "Rules:\n"
-        "- No filler or encouragement.\n"
-        "- Be direct, clinical, and precise.\n"
+        "- score reflects nutritional density and glycemic appropriateness for this patient.\n"
+        "- Include one food_notes entry per distinct food or meal item mentioned in the journal entry.\n"
+        "- Each note must be a short, direct, clinical sentence: no filler, no encouragement.\n"
+        "- If context mentions hypertension or diabetes, call out sodium/sugar explicitly where relevant.\n"
+        "- Do not propose replacement meals, menus, or recipes. Only comment on what was actually logged.\n"
         "- English only.\n"
-        "- If context mentions hypertension or diabetes, comment on sodium/sugar explicitly."
+        "- Output must be valid JSON and nothing else."
     )
 
     full_prompt = f"{system_prompt}{context_block}\n\n### Journal Entry\n{food_entry}"
 
     try:
-        response = llm.invoke(full_prompt)
-        analysis = response.content if hasattr(response, "content") else str(response)
-        return jsonify({"success": True, "analysis": analysis})
+        response = _get_journal_llm().invoke(full_prompt)
+        raw = response.content if hasattr(response, "content") else str(response)
+        parsed = json_lib.loads(raw)
+        score = parsed.get("score")
+        food_notes = parsed.get("food_notes")
+        if not isinstance(food_notes, list):
+            food_notes = []
+        food_notes = [
+            {"food": str(n.get("food", "")).strip(), "note": str(n.get("note", "")).strip()}
+            for n in food_notes
+            if isinstance(n, dict) and str(n.get("food", "")).strip()
+        ]
+        return jsonify({"success": True, "score": score, "food_notes": food_notes})
     except Exception as e:
         logger.error(f"[/analyze-journal] Error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500

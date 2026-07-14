@@ -3,6 +3,7 @@ const express = require("express");
 
 const { sequelize } = require("./models");
 const recommendationRoutes = require("./routes/recommendationRoutes");
+const journalRoutes = require("./routes/journalRoutes");
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -12,6 +13,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/", recommendationRoutes);
+app.use("/", journalRoutes);
 
 app.use((err, _req, res, _next) => {
   const status = err.status || 500;

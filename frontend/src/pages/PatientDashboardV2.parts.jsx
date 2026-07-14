@@ -428,6 +428,55 @@ export function ShoppingList({ items, recordId, onPlanUpdated, onSwapError }) {
   );
 }
 
+export function JournalReviewCard({ review }) {
+  const score = review?.score;
+  const scoreColor =
+    score == null ? "#94a3b8" : score >= 7 ? "#10b981" : score >= 4 ? "#f59e0b" : "#ef4444";
+  return (
+    <div className="pd-diary-card">
+      {score != null && (
+        <div
+          style={{
+            display: "inline-flex",
+            alignSelf: "flex-start",
+            fontSize: 13,
+            fontWeight: 700,
+            color: scoreColor,
+            background: `${scoreColor}1a`,
+            borderRadius: 999,
+            padding: "4px 12px",
+            marginBottom: 12,
+          }}
+        >
+          Score {score}/10
+        </div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {(review?.food_notes || []).map((n, i) => (
+          <div
+            key={`${n.food}-${i}`}
+            style={{
+              fontSize: 13.5,
+              lineHeight: 1.5,
+              padding: "8px 12px",
+              borderRadius: 8,
+              background: "var(--pd-bg, #f8fafc)",
+            }}
+          >
+            <strong>{n.food}</strong>
+            <span style={{ color: "var(--pd-muted)" }}> — {n.note}</span>
+          </div>
+        ))}
+        {(!review?.food_notes || review.food_notes.length === 0) && (
+          <p style={{ fontSize: 13.5, fontStyle: "italic", color: "var(--pd-muted)" }}>
+            No per-food notes available.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function EmptyState({ icon, title, subtitle }) {
   return (
     <div className="pd-empty">

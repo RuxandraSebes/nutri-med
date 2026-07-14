@@ -14,9 +14,11 @@ const sequelize = new Sequelize(MYSQL_DB, MYSQL_USER, MYSQL_PASSWORD, {
 });
 
 const DietPlan = require("./dietPlan")(sequelize);
+const JournalReview = require("./journalReview")(sequelize);
 
 module.exports = {
   sequelize,
   DietPlan,
+  JournalReview,
 };
 
